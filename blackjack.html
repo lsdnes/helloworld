@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Blackjack Party: Bust Effect</title>
+    <style>
+        :root {
+            --table-green: #154734;
+            --table-light: #2e7d32;
+            --wood: #3e2723;
+            --gold: #FFD700;
+            --bust-red: #e74c3c;
+        }
+
+        body {
+            margin: 0;
+            background: #111;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            height: 100dvh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .game-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 700px;
+            height: 100%;
+            background: radial-gradient(circle at 50% 40%, var(--table-light), var(--table-green));
+            box-shadow: inset 0 0 80px rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .game-wrapper::before {
+            content: ''; position: absolute; inset: 0;
+            border: 12px solid var(--wood); pointer-events: none; z-index: 50;
+        }
+
+        /* --- 莊家區 --- */
+        .dealer-section {
+            height: 25%;
+            display: flex; flex-direction: column; align-items: center;
+            padding-top: 40px; z-index: 10;
+        }
+        .avatar-box { position: relative; display: flex; flex-direction: column; align-items: center; }
+        .avatar-dealer { width: 70px; height: 70px; border-radius: 50%; border: 3px solid var(--gold); overflow: hidden; background: #000; }
+        .avatar-dealer img { width: 100%; height: 100%; object-fit: cover; }
+        .dealer-name { background: rgba(0,0,0,0.8); border: 1px solid var(--gold); padding: 2px 10px; border-radius: 10px; font-size: 0.7rem; margin-top: -10px; z-index: 2; color: var(--gold); }
+        .dealer-info { font-size: 0.7rem; color: #aaa; margin-top: 2px; }
+        .hand-area-dealer { display: flex; justify-content: center; height: 90px; width: 100%; margin-top: 5px; position: relative; }
+
+        /* --- 玩家與NPC --- */
+        .players-container {
+            flex: 1; display: flex; justify-content: space-between; align-items: flex-end;
+            padding: 0 10px 140px 10px; position: relative;
+        }
+
+        .npc-zone { display: flex; flex-direction: column; align-items: center; width: 25%; transition: opacity 0.3s; }
+        .npc-zone.active .avatar-npc { border-color: #00f3ff; box-shadow: 0 0 15px #00f3ff; transform: scale(1.1); }
+        .avatar-npc { width: 50px; height: 50px; border-radius: 50%; border: 2px solid #aaa; overflow: hidden; background: #000; transition: all 0.3s; }
+        .avatar-npc img { width: 100%; height: 100%; object-fit: cover; }
+        .npc-name { font-size: 0.7rem; margin-top: 2px; color: #ccc; }
+        .npc-hand { display: flex; justify-content: center; height: 60px; margin-bottom: 5px; transform: scale(0.8); transform-origin: bottom center; }
+
+        .player-zone { display: flex; flex-direction: column; align-items: center; width: 40%; z-index: 20; }
+        .player-zone.active .avatar-player { border-color: #2ecc71; box-shadow: 0 0 20px #2ecc71; }
+        .avatar-player { width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--gold); overflow: hidden; background: #000; transition: all 0.3s; }
+        .avatar-player img { width: 100%; height: 100%; object-fit: cover; }
+        .player-hand { display: flex; justify-content: center; height: 100px; margin-bottom: 5px; position: relative; }
+
+        /* --- 卡牌 --- */
+        .card {
+            width: 60px; height: 86px; background: white; border-radius: 5px;
+            position: relative; margin-left: -35px; box-shadow: -2px 3px 5px rgba(0,0,0,0.4);
+            display: flex; flex-direction: column; justify-content: space-between;
+            padding: 3px; box-sizing: border-box; font-weight: bold; font-size: 14px; color: #333;
+            animation: deal 0.3s ease-out;
+        }
+        @keyframes deal { from { transform: translateY(-50px) scale(0.5); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+        .card:first-child { margin-left: 0; }
+        .card.red { color: #c0392b; }
+        .card-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.5rem; }
+        .card-back { background: repeating-linear-gradient(45deg, #1a237e, #1a237e 5px, #283593 5px, #283593 10px); border: 2px solid white; }
+        .card-back * { display: none; }
+
+        /* 分數球 */
+        .score-bubble {
+            background: #222; color: #fff; border: 1px solid #777;
+            padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;
+            margin-top: -10px; z-index: 5; position: absolute; top: -15px;
+            transition: all 0.3s;
+        }
+        .player-score { border-color: var(--gold); color: var(--gold); font-size: 1rem; top: -25px; }
+
+        /* --- 新增：爆牌特效 CSS --- */
+        @keyframes shakeBust {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-4px) rotate(-2deg); }
+            40%, 80% { transform: translateX(4px) rotate(2deg); }
+        }
+        .bust-effect {
+            animation: shakeBust 0.4s ease-in-out;
+            background-color: var(--bust-red) !important;
+            color: white !important;
+            border-color: #c0392b !important;
+            box-shadow: 0 0 15px var(--bust-red);
+        }
+
+        /* --- 控制面板 --- */
+        .control-panel-fixed {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 95%; max-width: 500px;
+            background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 25px;
+            padding: 10px; display: flex; flex-direction: column; gap: 10px; z-index: 100;
+        }
+        .chips-row { display: flex; justify-content: center; gap: 8px; }
+        .chip { width: 45px; height: 45px; border-radius: 50%; border: 3px dashed rgba(255,255,255,0.6); display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 0.8rem; cursor: pointer; user-select: none; box-shadow: 0 3px 5px rgba(0,0,0,0.5); }
+        .chip:active { transform: scale(0.9); }
+        .c-10 { background: #c0392b; } .c-50 { background: #2980b9; } .c-100 { background: #2c3e50; border-color: var(--gold); color: var(--gold); } .c-all { background: var(--gold); color: #000; border-style: solid; font-size: 0.7rem; }
+        
+        .btn-row { display: flex; gap: 8px; width: 100%; }
+        .btn { flex: 1; padding: 10px 0; border: none; border-radius: 30px; font-weight: 800; font-size: 0.9rem; text-transform: uppercase; color: white; }
+        .btn:disabled { background: #555 !important; color: #888; }
+        .btn-deal { background: linear-gradient(#f1c40f, #f39c12); color: #222; }
+        .btn-hit { background: linear-gradient(#2ecc71, #27ae60); }
+        .btn-stand { background: linear-gradient(#e74c3c, #c0392b); }
+        .btn-clear { background: transparent; border: 1px solid #777; color: #ccc; flex: 0.4; }
+
+        .action-bubble { position: absolute; top: -30px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.9); color: #000; padding: 2px 8px; border-radius: 5px; font-size: 0.7rem; font-weight: bold; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; }
+        .show-bubble { opacity: 1; animation: floatUp 1s forwards; }
+        @keyframes floatUp { 0%{transform:translate(-50%,0);} 100%{transform:translate(-50%,-20px); opacity:0;} }
+
+        .shuffle-notice { position: absolute; top: 40%; left: 50%; transform: translate(-50%,-50%); background: rgba(0,0,0,0.8); color: var(--gold); padding: 10px 20px; border: 2px solid var(--gold); border-radius: 10px; font-size: 1.2rem; font-weight: bold; z-index: 200; display: none; animation: fadeInOut 2s forwards; }
+        @keyframes fadeInOut { 0%{opacity:0;} 20%{opacity:1;} 80%{opacity:1;} 100%{opacity:0;} }
+
+        /* 結算遮罩 (透視) */
+        .overlay {
+            position: absolute; inset: 0; background: rgba(0, 0, 0, 0.3); z-index: 1000;
+            display: none; flex-direction: column; justify-content: center; align-items: center;
+            backdrop-filter: none; pointer-events: auto;
+        }
+        
+        .res-text { font-size: 3rem; color: var(--gold); font-weight: 900; text-shadow: 0 4px 8px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.8); margin-bottom: 5px; }
+        .res-money { color: #fff; font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 5px rgba(0,0,0,1); background: rgba(0,0,0,0.6); padding: 2px 15px; border-radius: 10px; margin-bottom: 20px; }
+        .btn-next-small { width: auto !important; min-width: 100px; padding: 8px 25px !important; font-size: 0.9rem !important; border-radius: 50px !important; box-shadow: 0 5px 15px rgba(0,0,0,0.5); margin-top: 10px; flex: 0 !important; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="game-wrapper">
+
+    <div class="dealer-section">
+        <div class="avatar-box">
+            <div class="avatar-dealer">
+                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80">
+            </div>
+            <div class="dealer-name">ANDY</div>
+            <div class="dealer-info">Deck: <span id="deck-count">52</span>/52</div>
+        </div>
+        <div class="hand-area-dealer">
+            <div id="dealer-hand" style="display:flex;"></div>
+            <div class="score-bubble hidden" id="dealer-score">--</div>
+            <div id="dealer-bubble" class="action-bubble">HIT</div>
+        </div>
+    </div>
+
+    <div id="shuffle-msg" class="shuffle-notice">🔄 洗牌中 Shuffling...</div>
+
+    <div class="players-container">
+        <div class="npc-zone" id="npc-left">
+            <div id="bubble-left" class="action-bubble">HIT</div>
+            <div class="npc-hand" id="hand-left"></div>
+            <div style="position:relative;">
+                <div class="score-bubble hidden" id="score-left">0</div>
+                <div class="avatar-npc"><img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80"></div>
+            </div>
+            <div class="npc-name">Mike</div>
+        </div>
+
+        <div class="player-zone" id="player-zone">
+            <div id="bubble-player" class="action-bubble">HIT</div>
+            <div class="player-hand" id="hand-player"></div>
+            <div style="position:relative;">
+                <div class="score-bubble player-score hidden" id="score-player">0</div>
+                <div class="avatar-player"><img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&q=80"></div>
+            </div>
+            <div class="npc-name" style="color:var(--gold); font-weight:bold;">YOU: $<span id="balance">1000</span></div>
+            <div style="font-size:0.8rem; color:#aaa;">Bet: $<span id="current-bet">0</span></div>
+        </div>
+
+        <div class="npc-zone" id="npc-right">
+            <div id="bubble-right" class="action-bubble">STAND</div>
+            <div class="npc-hand" id="hand-right"></div>
+            <div style="position:relative;">
+                <div class="score-bubble hidden" id="score-right">0</div>
+                <div class="avatar-npc"><img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80"></div>
+            </div>
+            <div class="npc-name">Lisa</div>
+        </div>
+    </div>
+
+    <div class="control-panel-fixed">
+        <div id="panel-bet" style="display: flex; flex-direction: column; gap: 8px;">
+            <div class="chips-row">
+                <div class="chip c-10" onclick="bet(10)">10</div>
+                <div class="chip c-50" onclick="bet(50)">50</div>
+                <div class="chip c-100" onclick="bet(100)">100</div>
+                <div class="chip c-all" onclick="betAll()">ALL</div>
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-clear" onclick="clearBet()">清除</button>
+                <button class="btn btn-deal" id="btn-deal" onclick="startRound()" disabled>發牌 DEAL</button>
+            </div>
+        </div>
+
+        <div id="panel-play" class="btn-row hidden">
+            <button class="btn btn-hit" onclick="playerAction('hit')">要牌 HIT</button>
+            <button class="btn btn-stand" onclick="playerAction('stand')">停牌 STAND</button>
+        </div>
+    </div>
+
+    <div id="overlay" class="overlay">
+        <div class="res-text" id="res-title">WIN</div>
+        <div class="res-money" id="res-money">+$100</div>
+        <button class="btn btn-deal btn-next-small" onclick="resetUI()">下一局 ➔</button>
+    </div>
+
+</div>
+
+<script>
+    const suits = ['♠', '♥', '♦', '♣'];
+    const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+    let deck = [];
+    let players = {
+        left: { hand: [], score: 0, div: 'hand-left', scoreDiv: 'score-left', bubble: 'bubble-left' },
+        player: { hand: [], score: 0, div: 'hand-player', scoreDiv: 'score-player', bubble: 'bubble-player' },
+        right: { hand: [], score: 0, div: 'hand-right', scoreDiv: 'score-right', bubble: 'bubble-right' },
+        dealer: { hand: [], score: 0, div: 'dealer-hand', scoreDiv: 'dealer-score', bubble: 'dealer-bubble' }
+    };
+    let balance = 1000;
+    let currentBet = 0;
+    let isGameRunning = false;
+
+    function initDeck() {
+        deck = [];
+        for(let s of suits) for(let v of values) deck.push({suit:s, value:v});
+        shuffle(deck);
+        updateDeckCount();
+    }
+    function shuffle(array) {
+        for(let i=array.length-1; i>0; i--) {
+            const j=Math.floor(Math.random()*(i+1));
+            [array[i],array[j]]=[array[j],array[i]];
+        }
+    }
+    function drawCard() {
+        if (deck.length < 15) {
+            document.getElementById('shuffle-msg').style.display = 'block';
+            setTimeout(() => { document.getElementById('shuffle-msg').style.display = 'none'; }, 2000);
+            let newDeck = [];
+            for(let s of suits) for(let v of values) newDeck.push({suit:s, value:v});
+            shuffle(newDeck);
+            deck = newDeck;
+        }
+        let card = deck.pop();
+        updateDeckCount();
+        return card;
+    }
+    function updateDeckCount() { document.getElementById('deck-count').innerText = deck.length; }
+    function getVal(c) {
+        if(['J','Q','K'].includes(c.value)) return 10;
+        if(c.value==='A') return 11;
+        return parseInt(c.value);
+    }
+    function calcScore(hand) {
+        let s=0, a=0;
+        hand.forEach(c=>{ s+=getVal(c); if(c.value==='A') a++; });
+        while(s>21 && a>0) { s-=10; a--; }
+        return s;
+    }
+    function createCardUI(c, hide=false) {
+        const d = document.createElement('div');
+        d.className = hide ? 'card card-back' : `card ${['♥','♦'].includes(c.suit)?'red':''}`;
+        if(!hide) d.innerHTML = `<div>${c.value}</div><div class="card-center">${c.suit}</div>`;
+        return d;
+    }
+    function renderHand(role, hideFirst=false) {
+        const p = players[role];
+        const div = document.getElementById(p.div);
+        div.innerHTML = '';
+        p.hand.forEach((c, i) => { div.appendChild(createCardUI(c, hideFirst && i===0)); });
+        p.score = calcScore(p.hand);
+        const sDiv = document.getElementById(p.scoreDiv);
+        if(hideFirst) sDiv.classList.add('hidden');
+        else { 
+            sDiv.innerText = p.score; 
+            sDiv.classList.remove('hidden'); 
+        }
+    }
+    function showAction(role, text) {
+        const b = document.getElementById(players[role].bubble);
+        b.innerText = text; b.classList.remove('show-bubble');
+        void b.offsetWidth; b.classList.add('show-bubble');
+    }
+    function setActive(role) {
+        document.getElementById('npc-left').classList.remove('active');
+        document.getElementById('player-zone').classList.remove('active');
+        document.getElementById('npc-right').classList.remove('active');
+        if(role === 'left') document.getElementById('npc-left').classList.add('active');
+        if(role === 'player') document.getElementById('player-zone').classList.add('active');
+        if(role === 'right') document.getElementById('npc-right').classList.add('active');
+    }
+    
+    // --- 新增：觸發爆牌特效 ---
+    function triggerBustEffect(role) {
+        const p = players[role];
+        const scoreDiv = document.getElementById(p.scoreDiv);
+        // 移除舊的 animation 以便重新觸發
+        scoreDiv.classList.remove('bust-effect');
+        void scoreDiv.offsetWidth; // trigger reflow
+        scoreDiv.classList.add('bust-effect');
+    }
+
+    function bet(n) { if(!isGameRunning && balance>=n) { balance-=n; currentBet+=n; updateInfo(); } }
+    function betAll() { if(!isGameRunning && balance>0) { currentBet+=balance; balance=0; updateInfo(); } }
+    function clearBet() { if(!isGameRunning) { balance+=currentBet; currentBet=0; updateInfo(); } }
+    function updateInfo() {
+        document.getElementById('balance').innerText = balance;
+        document.getElementById('current-bet').innerText = currentBet;
+        document.getElementById('btn-deal').disabled = currentBet <= 0;
+    }
+
+    async function startRound() {
+        if(currentBet <= 0) return;
+        if(deck.length === 0) initDeck();
+        isGameRunning = true;
+        document.getElementById('panel-bet').classList.add('hidden');
+        for(let k in players) players[k].hand = [];
+        for(let i=0; i<2; i++) {
+            players.left.hand.push(drawCard()); renderHand('left'); await wait(200);
+            players.player.hand.push(drawCard()); renderHand('player'); await wait(200);
+            players.right.hand.push(drawCard()); renderHand('right'); await wait(200);
+            players.dealer.hand.push(drawCard()); renderHand('dealer', true); await wait(200);
+        }
+        await runNpcTurn('left');
+    }
+
+    async function runNpcTurn(role) {
+        setActive(role);
+        const p = players[role];
+        while(p.score < 17) {
+            await wait(800);
+            showAction(role, 'HIT');
+            p.hand.push(drawCard()); renderHand(role);
+            if(p.score > 21) { 
+                showAction(role, 'BUST');
+                triggerBustEffect(role); // 觸發特效
+                await wait(500); 
+                break; 
+            }
+        }
+        if(p.score <= 21) showAction(role, 'STAND');
+        await wait(800);
+        if(role === 'left') startPlayerTurn();
+        else if(role === 'right') runDealerTurn();
+    }
+
+    function startPlayerTurn() {
+        setActive('player');
+        if(players.player.score === 21) {
+             showAction('player', 'BLACKJACK!');
+             setTimeout(() => { setActive(''); runNpcTurn('right'); }, 1000);
+             return;
+        }
+        document.getElementById('panel-play').classList.remove('hidden');
+    }
+
+    function playerAction(act) {
+        if(act === 'hit') {
+            showAction('player', 'HIT');
+            players.player.hand.push(drawCard()); renderHand('player');
+            if(players.player.score > 21) {
+                showAction('player', 'BUST');
+                triggerBustEffect('player'); // 觸發特效
+                document.getElementById('panel-play').classList.add('hidden');
+                setTimeout(() => runNpcTurn('right'), 1000);
+            } else if(players.player.hand.length === 5) {
+                showAction('player', '5-Card Charlie!');
+                document.getElementById('panel-play').classList.add('hidden');
+                setTimeout(() => runNpcTurn('right'), 1000);
+            }
+        } else {
+            showAction('player', 'STAND');
+            document.getElementById('panel-play').classList.add('hidden');
+            setTimeout(() => runNpcTurn('right'), 500);
+        }
+    }
+
+    async function runDealerTurn() {
+        setActive('');
+        renderHand('dealer', false);
+        let ds = players.dealer.score;
+        while(ds < 17) {
+            await wait(1000); showAction('dealer', 'HIT');
+            players.dealer.hand.push(drawCard()); renderHand('dealer', false);
+            ds = players.dealer.score;
+        }
+        if(ds > 21) {
+            showAction('dealer', 'BUST');
+            triggerBustEffect('dealer'); // 觸發特效
+        } else {
+            showAction('dealer', 'STAND');
+        }
+        await wait(1000); endGame();
+    }
+
+    function endGame() {
+        const p = players.player; const d = players.dealer;
+        let mult = 0; let text = 'LOSE';
+        if(p.score > 21) { mult = 0; text = 'BUST'; }
+        else if(p.hand.length >= 5) { mult = 3; text = '5-Card Win'; }
+        else if(p.score === 21 && p.hand.length === 2) {
+            if(d.score === 21 && d.hand.length === 2) { mult = 1; text = 'PUSH'; }
+            else { mult = 2.5; text = 'BLACKJACK'; }
+        }
+        else if(d.score > 21) { mult = 2; text = 'WIN'; }
+        else if(p.score > d.score) { mult = 2; text = 'WIN'; }
+        else if(p.score < d.score) { mult = 0; text = 'LOSE'; }
+        else { mult = 1; text = 'PUSH'; }
+
+        const win = Math.floor(currentBet * mult);
+        balance += win;
+        
+        document.getElementById('res-title').innerText = text;
+        document.getElementById('res-title').style.color = mult > 1 ? '#2ecc71' : (mult===0 ? '#e74c3c' : '#f1c40f');
+        document.getElementById('res-money').innerText = mult>1 ? `+$${win-currentBet}` : (mult===1 ? '退回賭注' : `-$${currentBet}`);
+        
+        if(balance === 0 && mult === 0) balance = 1000;
+        document.getElementById('overlay').style.display = 'flex';
+        updateInfo();
+    }
+
+    function resetUI() {
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('panel-bet').classList.remove('hidden');
+        document.getElementById('dealer-hand').innerHTML = '';
+        document.getElementById('hand-left').innerHTML = '';
+        document.getElementById('hand-right').innerHTML = '';
+        document.getElementById('hand-player').innerHTML = '';
+        // 清除所有分數球的顯示和特效
+        document.querySelectorAll('.score-bubble').forEach(el => {
+            el.classList.add('hidden');
+            el.classList.remove('bust-effect');
+        });
+        currentBet = 0;
+        updateInfo();
+        isGameRunning = false;
+    }
+
+    function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+    initDeck(); updateInfo();
+</script>
+</body>
+</html>
