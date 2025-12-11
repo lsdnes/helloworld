@@ -255,12 +255,52 @@
         import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, getDocs, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Config & Init ---
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app';
+        // ⚠️ 部署到 GitHub Pages 前的必做設定 / REQUIRED SETUP FOR GITHUB PAGES
+        // ------------------------------------------------------------------
+        // 請到 Firebase Console (https://console.firebase.google.com/)
+        // 建立一個專案，並複製 "Web App" 的設定貼在下方：
         
-        const app = initializeApp(firebaseConfig);
+        const manualConfig = {
+            // 請將下方的字串替換為您的 Firebase 實際設定
+            // Please replace the strings below with your actual Firebase config
+            apiKey: "AIzaSyB4mNbRMkVAY-R5JSrF2O7fPN4dDry8alI",
+			authDomain: "xmas-1654f.firebaseapp.com",
+			projectId: "xmas-1654f",
+			storageBucket: "xmas-1654f.firebasestorage.app",
+			messagingSenderId: "171667807726",
+			appId: "1:171667807726:web:485e64aa2ec736ef4f02ff",
+			measurementId: "G-ZBN2J3BKLD"
+        };
+
+        // 自動判斷環境：
+        // 1. 如果是在 AI 對話視窗，使用自動注入的變數 (__firebase_config)
+        // 2. 如果是在 GitHub / 本地端，使用上方的 manualConfig
+        let finalConfig;
+        let finalAppId;
+
+        try {
+            if (typeof __firebase_config !== 'undefined') {
+                finalConfig = JSON.parse(__firebase_config);
+                finalAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app';
+            } else {
+                finalConfig = manualConfig;
+                finalAppId = 'christmas-raffle-v1'; // 自訂 App ID
+            }
+        } catch (e) {
+            finalConfig = manualConfig;
+            finalAppId = 'christmas-raffle-v1';
+        }
+
+        // 檢查是否已設定 (若在 GitHub 上且未設定，跳出警告)
+        if (typeof __firebase_config === 'undefined' && finalConfig.apiKey === "替換成您的_apiKey") {
+            alert("⚠️ 尚未設定 Firebase！\n\n程式無法連線資料庫，按鈕將無反應。\n\n請用文字編輯器打開此 HTML 檔案，\n搜尋 'const manualConfig' 並填入您的設定。");
+            console.error("Firebase config not set! Please fill in manualConfig object.");
+        }
+        
+        const app = initializeApp(finalConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const appId = finalAppId;
 
         // --- State ---
         let currentUser = null;
@@ -271,7 +311,12 @@
         // --- Auth ---
         const initAuth = async () => {
              if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
+                try {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } catch(e) {
+                    console.warn("AI Token login failed, switching to anonymous.", e);
+                    await signInAnonymously(auth);
+                }
             } else {
                 await signInAnonymously(auth);
             }
@@ -371,7 +416,7 @@
 
             } catch (err) {
                 console.error("Error adding document:", err);
-                alert("發生錯誤，請稍後再試。");
+                alert("發生錯誤，請稍後再試。若持續發生，請檢查 Firebase 設定。");
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane mr-2"></i> 確認送出';
