@@ -136,6 +136,10 @@
                 <i class="fa-solid fa-ticket text-5xl text-yellow-400 mb-4"></i>
                 <h2 class="text-2xl font-bold mb-2">登記參加抽獎</h2>
                 <p class="text-sm opacity-80">填寫資料，將有機會獲得大獎！</p>
+                <!-- Debug Status Indicator -->
+                <p id="connectionStatus" class="text-xs mt-2 text-yellow-300 animate-pulse">
+                    <i class="fa-solid fa-circle-notch fa-spin"></i> 正在連線到伺服器...
+                </p>
             </div>
 
             <form id="raffleForm" class="space-y-4">
@@ -308,28 +312,6 @@
         let isDrawing = false;
         const COLLECTION_NAME = 'participants';
 
-        // --- Auth ---
-        const initAuth = async () => {
-             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                try {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } catch(e) {
-                    console.warn("AI Token login failed, switching to anonymous.", e);
-                    await signInAnonymously(auth);
-                }
-            } else {
-                await signInAnonymously(auth);
-            }
-        };
-        initAuth();
-
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                setupRealtimeListener();
-            }
-        });
-
         // --- DOM Elements ---
         const views = {
             reg: document.getElementById('registrationView'),
@@ -341,6 +323,48 @@
         const countDisplay = document.getElementById('participantCount');
         const drawDisplay = document.getElementById('scrollingName');
         const drawBtn = document.getElementById('drawBtn');
+        const statusEl = document.getElementById('connectionStatus');
+
+        // --- Auth ---
+        const initAuth = async () => {
+             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                try {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } catch(e) {
+                    console.warn("AI Token login failed, switching to anonymous.", e);
+                    try {
+                        await signInAnonymously(auth);
+                    } catch (anonErr) {
+                         console.error("Anonymous login failed", anonErr);
+                         alert("無法連線到資料庫 (登入失敗)。請檢查 Firebase 設定是否正確 (API Key)。\n錯誤訊息: " + anonErr.message);
+                         statusEl.innerHTML = '<i class="fa-solid fa-circle-xmark text-red-500"></i> 連線失敗 (設定錯誤)';
+                         statusEl.className = "text-xs mt-2 text-red-300 font-bold";
+                    }
+                }
+            } else {
+                try {
+                    await signInAnonymously(auth);
+                } catch (e) {
+                    console.error("Anonymous login failed", e);
+                    // 只有在不是 AI 環境下才跳出這個錯誤，避免干擾預覽
+                    if (typeof __firebase_config === 'undefined') {
+                        alert("無法連線到資料庫 (登入失敗)。\n請檢查您的 'manualConfig' 是否已正確填入 Firebase 資料。\n\n錯誤: " + e.message);
+                    }
+                    statusEl.innerHTML = '<i class="fa-solid fa-circle-xmark text-red-500"></i> 連線失敗 (請檢查設定)';
+                    statusEl.className = "text-xs mt-2 text-red-300 font-bold";
+                }
+            }
+        };
+        initAuth();
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                statusEl.innerHTML = '<i class="fa-solid fa-circle-check text-green-400"></i> 伺服器連線成功';
+                statusEl.className = "text-xs mt-2 text-green-300";
+                setupRealtimeListener();
+            }
+        });
 
         // --- Firestore Logic ---
         function getCollectionRef() {
@@ -378,13 +402,19 @@
                 countDisplay.textContent = participants.length;
             }, (error) => {
                 console.error("Error listening to data:", error);
+                statusEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 讀取資料失敗 (權限/設定)';
             });
         }
 
         // --- Registration Logic ---
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            if (!currentUser) return;
+            
+            // 檢查使用者是否已登入
+            if (!currentUser) {
+                alert("尚未連線到伺服器！\n\n可能原因：\n1. Firebase 設定有誤 (API Key)\n2. 網路連線不穩\n\n請檢查程式碼中的 manualConfig 設定，或重新整理網頁。");
+                return;
+            }
 
             const nameInput = document.getElementById('guestName');
             const phoneInput = document.getElementById('guestPhone');
@@ -416,7 +446,7 @@
 
             } catch (err) {
                 console.error("Error adding document:", err);
-                alert("發生錯誤，請稍後再試。若持續發生，請檢查 Firebase 設定。");
+                alert("發生錯誤，無法送出資料。\n\n請確認您的 Firestore 資料庫規則是否允許寫入，或檢查 Firebase 設定。\n錯誤代碼: " + err.code);
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane mr-2"></i> 確認送出';
