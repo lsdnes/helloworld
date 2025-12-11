@@ -87,9 +87,19 @@
             box-shadow: 0 0 0 #8b0000;
         }
 
-        .btn-stop {
-            background: linear-gradient(to bottom, #555, #333);
-            border: 2px solid #999;
+        .search-input {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid #fbbf24;
+            color: #fff;
+            width: 100%;
+            padding: 8px 12px 8px 36px;
+            border-radius: 999px;
+            outline: none;
+            transition: all 0.3s;
+        }
+        .search-input:focus {
+            background: rgba(0, 0, 0, 0.6);
+            box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.5);
         }
 
         .gold-text {
@@ -196,6 +206,13 @@
                     <span><i class="fa-solid fa-trophy text-yellow-400 mr-2"></i> 中獎名單</span>
                     <span class="text-xs font-normal bg-yellow-600 px-2 py-1 rounded text-black">即時更新</span>
                 </h3>
+                
+                <!-- Guest Search Bar -->
+                <div class="mb-4 relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-yellow-400"></i>
+                    <input type="text" id="guestSearchInput" placeholder="搜尋姓名或電話末三碼..." class="search-input">
+                </div>
+
                 <div class="overflow-y-auto max-h-60 custom-scrollbar">
                     <table class="w-full text-left">
                         <thead class="bg-black bg-opacity-30 text-yellow-400 text-sm">
@@ -209,9 +226,12 @@
                             <!-- Winners injected here -->
                         </tbody>
                     </table>
-                    <p id="guestNoWinnersMsg" class="text-center text-gray-400 py-6 text-sm italic">
+                    <p id="guestNoWinnersMsg" class="text-center text-gray-400 py-6 text-sm italic hidden">
                         <i class="fa-solid fa-gift mb-2 text-2xl block"></i>
                         抽獎準備中...
+                    </p>
+                    <p id="guestNoMatchMsg" class="text-center text-gray-400 py-6 text-sm italic hidden">
+                        查無符合資料
                     </p>
                 </div>
             </div>
@@ -271,6 +291,13 @@
                 <h3 class="text-xl font-bold mb-4 border-b border-yellow-500 pb-2 flex items-center">
                     <i class="fa-solid fa-trophy text-yellow-400 mr-2"></i> 榮譽榜 (中獎名單)
                 </h3>
+
+                <!-- Admin Search Bar -->
+                <div class="mb-4 relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-yellow-400"></i>
+                    <input type="text" id="adminSearchInput" placeholder="搜尋姓名或電話末三碼..." class="search-input">
+                </div>
+
                 <div class="overflow-y-auto max-h-48 custom-scrollbar">
                     <table class="w-full text-left">
                         <thead class="bg-black bg-opacity-30 text-yellow-400">
@@ -286,7 +313,8 @@
                             <!-- Winners will be injected here -->
                         </tbody>
                     </table>
-                    <p id="noWinnersMsg" class="text-center text-gray-400 py-4 text-sm italic">目前尚未產生中獎者</p>
+                    <p id="noWinnersMsg" class="text-center text-gray-400 py-4 text-sm italic hidden">目前尚未產生中獎者</p>
+                    <p id="adminNoMatchMsg" class="text-center text-gray-400 py-4 text-sm italic hidden">查無符合資料</p>
                 </div>
             </div>
 
@@ -350,12 +378,12 @@
             // 請將下方的字串替換為您的 Firebase 實際設定
             // Please replace the strings below with your actual Firebase config
             apiKey: "AIzaSyB4mNbRMkVAY-R5JSrF2O7fPN4dDry8alI",
-			authDomain: "xmas-1654f.firebaseapp.com",
-			projectId: "xmas-1654f",
-			storageBucket: "xmas-1654f.firebasestorage.app",
-			messagingSenderId: "171667807726",
-			appId: "1:171667807726:web:485e64aa2ec736ef4f02ff",
-			measurementId: "G-ZBN2J3BKLD"
+            authDomain: "xmas-1654f.firebaseapp.com",
+            projectId: "xmas-1654f",
+            storageBucket: "xmas-1654f.firebasestorage.app",
+            messagingSenderId: "171667807726",
+            appId: "1:171667807726:web:485e64aa2ec736ef4f02ff",
+            measurementId: "G-ZBN2J3BKLD"
         };
 
         // 自動判斷環境：
@@ -395,8 +423,14 @@
         const statusEl = document.getElementById('connectionStatus');
         const errorDetails = document.getElementById('errorDetails');
         const errorDetailsText = document.getElementById('errorDetailsText');
+        
         const noWinnersMsg = document.getElementById('noWinnersMsg');
+        const adminNoMatchMsg = document.getElementById('adminNoMatchMsg');
         const guestNoWinnersMsg = document.getElementById('guestNoWinnersMsg');
+        const guestNoMatchMsg = document.getElementById('guestNoMatchMsg');
+        
+        const adminSearchInput = document.getElementById('adminSearchInput');
+        const guestSearchInput = document.getElementById('guestSearchInput');
 
         // Helper for showing errors
         function showError(message, technicalDetail = "") {
@@ -514,80 +548,18 @@
                 console.error("Error listening to participants:", error);
             });
 
-            // 2. Listen for Winners (Populates both Admin and Guest lists)
+            // 2. Listen for Winners (Store in memory, Render by function)
             const qWinners = query(getCollectionRef(WINNERS_COLLECTION_NAME), orderBy('timestamp', 'asc')); 
             onSnapshot(qWinners, (snapshot) => {
                 winners = [];
-                winnersTableBody.innerHTML = '';
-                guestWinnersTableBody.innerHTML = '';
-                
-                if (snapshot.empty) {
-                    noWinnersMsg.classList.remove('hidden');
-                    guestNoWinnersMsg.classList.remove('hidden');
-                } else {
-                    noWinnersMsg.classList.add('hidden');
-                    guestNoWinnersMsg.classList.add('hidden');
-                    let rank = 1;
-                    snapshot.forEach(doc => {
-                        const data = doc.data();
-                        winners.push({ id: doc.id, ...data });
-                        
-                        // Data formatting
-                        const phoneDisplay = data.phone.length > 3 ? '***' + data.phone.slice(-3) : data.phone;
-                        const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
-                        const isClaimed = data.claimed || false;
-
-                        // --- Render Admin Table Row ---
-                        const row = document.createElement('tr');
-                        row.className = 'bg-yellow-900 bg-opacity-20 hover:bg-opacity-40 transition-colors border-b border-yellow-800';
-                        const rankHtml = rank <= 3 
-                            ? `<span class="inline-block w-8 h-8 rounded-full bg-yellow-500 text-black font-bold flex items-center justify-center">${rank}</span>` 
-                            : `<span class="text-gray-300 pl-2">#${rank}</span>`;
-                        
-                        // Action button based on status
-                        const claimBtnClass = isClaimed 
-                            ? "bg-gray-600 hover:bg-gray-500 text-gray-300" 
-                            : "bg-red-600 hover:bg-red-500 text-white animate-pulse";
-                        const claimBtnText = isClaimed ? "已領" : "未領";
-
-                        // Admin Name Style
-                        const adminNameClass = isClaimed ? "text-gray-500" : "text-yellow-200";
-
-                        row.innerHTML = `
-                            <td class="p-3">${rankHtml}</td>
-                            <td class="p-3 font-bold text-lg ${adminNameClass}">
-                                ${escapeHtml(data.name)}
-                            </td>
-                            <td class="p-3 font-mono">${escapeHtml(phoneDisplay)}</td>
-                            <td class="p-3 text-xs text-yellow-500 opacity-70">${time}</td>
-                            <td class="p-3">
-                                <button onclick="toggleClaimStatus('${doc.id}', ${isClaimed})" class="text-xs px-2 py-1 rounded ${claimBtnClass} font-bold border border-gray-500">
-                                    ${claimBtnText}
-                                </button>
-                            </td>
-                        `;
-                        winnersTableBody.appendChild(row);
-
-                        // --- Render Guest Table Row (Simplified) ---
-                        const guestRow = document.createElement('tr');
-                        guestRow.className = 'border-b border-yellow-800 hover:bg-yellow-800 hover:bg-opacity-30';
-                        
-                        // Guest Name Style
-                        const guestNameClass = isClaimed ? "text-gray-500" : "text-yellow-300";
-
-                        guestRow.innerHTML = `
-                            <td class="p-2">${rankHtml}</td>
-                            <td class="p-2 font-bold ${guestNameClass}">
-                                ${escapeHtml(data.name)}
-                            </td>
-                            <td class="p-2 font-mono text-gray-300">${escapeHtml(phoneDisplay)}</td>
-                        `;
-                        guestWinnersTableBody.appendChild(guestRow);
-                        
-                        rank++;
-                    });
-                }
+                snapshot.forEach(doc => {
+                    winners.push({ id: doc.id, ...doc.data() });
+                });
                 winnerCountDisplay.textContent = winners.length;
+                
+                // Re-render both tables
+                renderAllWinnerTables();
+                
             }, (error) => {
                 console.error("Error listening to winners:", error);
             });
@@ -604,6 +576,122 @@
                 updateRegistrationUI();
             });
         }
+
+        // --- Render Functions (with Search Filter) ---
+        
+        function renderAllWinnerTables() {
+            const adminTerm = adminSearchInput.value.trim().toLowerCase();
+            const guestTerm = guestSearchInput.value.trim().toLowerCase();
+            
+            renderAdminWinnersTable(adminTerm);
+            renderGuestWinnersTable(guestTerm);
+        }
+
+        function filterWinners(term) {
+            if (!term) return winners;
+            return winners.filter(w => {
+                const nameMatch = w.name.toLowerCase().includes(term);
+                const phoneMatch = w.phone.includes(term); // Phone stored as clean digits
+                return nameMatch || phoneMatch;
+            });
+        }
+
+        function renderAdminWinnersTable(searchTerm) {
+            const filteredWinners = filterWinners(searchTerm);
+            winnersTableBody.innerHTML = '';
+            
+            if (winners.length === 0) {
+                noWinnersMsg.classList.remove('hidden');
+                adminNoMatchMsg.classList.add('hidden');
+            } else if (filteredWinners.length === 0) {
+                noWinnersMsg.classList.add('hidden');
+                adminNoMatchMsg.classList.remove('hidden');
+            } else {
+                noWinnersMsg.classList.add('hidden');
+                adminNoMatchMsg.classList.add('hidden');
+                
+                filteredWinners.forEach(data => {
+                    // Use winnerRank from data, fallback to index calculation if not strictly reliable client-side order needed
+                    // But we ordered by timestamp in query, so array index matches rank logic if filter is OFF.
+                    // If filter is ON, we should probably show their ORIGINAL rank.
+                    const rank = data.winnerRank || '?';
+                    
+                    const phoneDisplay = data.phone.length > 3 ? '***' + data.phone.slice(-3) : data.phone;
+                    const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
+                    const isClaimed = data.claimed || false;
+
+                    const row = document.createElement('tr');
+                    row.className = 'bg-yellow-900 bg-opacity-20 hover:bg-opacity-40 transition-colors border-b border-yellow-800';
+                    const rankHtml = rank <= 3 
+                        ? `<span class="inline-block w-8 h-8 rounded-full bg-yellow-500 text-black font-bold flex items-center justify-center">${rank}</span>` 
+                        : `<span class="text-gray-300 pl-2">#${rank}</span>`;
+                    
+                    const claimBtnClass = isClaimed 
+                        ? "bg-gray-600 hover:bg-gray-500 text-gray-300" 
+                        : "bg-red-600 hover:bg-red-500 text-white animate-pulse";
+                    const claimBtnText = isClaimed ? "已領" : "未領";
+                    const adminNameClass = isClaimed ? "text-gray-500" : "text-yellow-200";
+
+                    row.innerHTML = `
+                        <td class="p-3">${rankHtml}</td>
+                        <td class="p-3 font-bold text-lg ${adminNameClass}">
+                            ${escapeHtml(data.name)}
+                        </td>
+                        <td class="p-3 font-mono">${escapeHtml(phoneDisplay)}</td>
+                        <td class="p-3 text-xs text-yellow-500 opacity-70">${time}</td>
+                        <td class="p-3">
+                            <button onclick="toggleClaimStatus('${data.id}', ${isClaimed})" class="text-xs px-2 py-1 rounded ${claimBtnClass} font-bold border border-gray-500">
+                                ${claimBtnText}
+                            </button>
+                        </td>
+                    `;
+                    winnersTableBody.appendChild(row);
+                });
+            }
+        }
+
+        function renderGuestWinnersTable(searchTerm) {
+            const filteredWinners = filterWinners(searchTerm);
+            guestWinnersTableBody.innerHTML = '';
+            
+            if (winners.length === 0) {
+                guestNoWinnersMsg.classList.remove('hidden');
+                guestNoMatchMsg.classList.add('hidden');
+            } else if (filteredWinners.length === 0) {
+                guestNoWinnersMsg.classList.add('hidden');
+                guestNoMatchMsg.classList.remove('hidden');
+            } else {
+                guestNoWinnersMsg.classList.add('hidden');
+                guestNoMatchMsg.classList.add('hidden');
+                
+                filteredWinners.forEach(data => {
+                    const rank = data.winnerRank || '?';
+                    const phoneDisplay = data.phone.length > 3 ? '***' + data.phone.slice(-3) : data.phone;
+                    const isClaimed = data.claimed || false;
+                    const guestNameClass = isClaimed ? "text-gray-500" : "text-yellow-300";
+
+                    const row = document.createElement('tr');
+                    row.className = 'border-b border-yellow-800 hover:bg-yellow-800 hover:bg-opacity-30';
+                    const rankHtml = rank <= 3 
+                        ? `<span class="inline-block w-8 h-8 rounded-full bg-yellow-500 text-black font-bold flex items-center justify-center">${rank}</span>` 
+                        : `<span class="text-gray-300 pl-2">#${rank}</span>`;
+
+                    row.innerHTML = `
+                        <td class="p-2">${rankHtml}</td>
+                        <td class="p-2 font-bold ${guestNameClass}">
+                            ${escapeHtml(data.name)}
+                        </td>
+                        <td class="p-2 font-mono text-gray-300">${escapeHtml(phoneDisplay)}</td>
+                    `;
+                    guestWinnersTableBody.appendChild(row);
+                });
+            }
+        }
+
+        // Attach input listeners
+        adminSearchInput.addEventListener('input', () => renderAdminWinnersTable(adminSearchInput.value.trim().toLowerCase()));
+        guestSearchInput.addEventListener('input', () => renderGuestWinnersTable(guestSearchInput.value.trim().toLowerCase()));
+
 
         // --- UI Updates ---
         function updateRegistrationUI() {
