@@ -201,7 +201,7 @@
 
                     <!-- Draw Control Section -->
                     <div class="flex flex-col justify-center items-center text-center">
-                        <div id="drawDisplay" class="w-full h-32 bg-black bg-opacity-50 rounded-xl border-4 border-yellow-400 flex items-center justify-center mb-4 overflow-hidden relative">
+                        <div id="drawDisplay" class="w-full h-40 bg-black bg-opacity-50 rounded-xl border-4 border-yellow-400 flex items-center justify-center mb-4 overflow-hidden relative p-4">
                             <div id="scrollingName" class="text-4xl font-bold text-white">準備抽獎</div>
                             <div id="fireworks" class="absolute inset-0 pointer-events-none"></div>
                         </div>
@@ -263,7 +263,6 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        // 加入了 'where' 用於查詢
         import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, getDocs, doc, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Config & Init ---
@@ -458,16 +457,14 @@
                 submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 檢查中...';
 
                 // 2. 檢查是否重複 (Duplicate Check)
-                // 查詢資料庫中是否已有此電話號碼
                 const q = query(getCollectionRef(), where("phone", "==", phone));
                 const querySnapshot = await getDocs(q);
 
                 if (!querySnapshot.empty) {
                     alert("這個電話號碼已經登記過了喔！\n請勿重覆報名。");
-                    // 恢復按鈕狀態
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane mr-2"></i> 確認送出';
-                    return; // 停止執行
+                    return; 
                 }
 
                 // 3. 沒有重複，開始寫入
@@ -519,6 +516,8 @@
             drawDisplay.classList.add('rolling');
             drawDisplay.classList.remove('text-yellow-300', 'scale-125'); // Reset style
             drawDisplay.style.textShadow = 'none';
+            // Reset to default style if needed
+            drawDisplay.innerHTML = '<span class="text-4xl font-bold text-white">準備抽獎</span>'; 
 
             let counter = 0;
             const maxIterations = 30; // How many shuffles before stopping
@@ -526,6 +525,7 @@
             // Rolling animation
             const interval = setInterval(() => {
                 const randomIdx = Math.floor(Math.random() * participants.length);
+                // Rolling only shows Name to keep it clean fast
                 drawDisplay.textContent = participants[randomIdx].name;
                 counter++;
 
@@ -540,10 +540,21 @@
             // Actually pick a winner
             const winnerIdx = Math.floor(Math.random() * participants.length);
             const winner = participants[winnerIdx];
+            const phoneLast3 = winner.phone.length > 3 ? winner.phone.slice(-3) : winner.phone;
 
             // Visual Stop
             drawDisplay.classList.remove('rolling');
-            drawDisplay.textContent = winner.name;
+            
+            // 這裡修改：顯示 姓名 + 電話末三碼
+            drawDisplay.innerHTML = `
+                <div class="flex flex-col items-center">
+                    <div class="text-4xl md:text-5xl mb-2">${escapeHtml(winner.name)}</div>
+                    <div class="text-2xl md:text-3xl text-yellow-300 font-mono bg-black bg-opacity-30 px-3 py-1 rounded">
+                        (末三碼: ${escapeHtml(phoneLast3)})
+                    </div>
+                </div>
+            `;
+            
             drawDisplay.classList.add('winner-animation', 'text-yellow-300');
             drawDisplay.style.textShadow = '0 0 10px #ff0000, 0 0 20px #ff0000';
             
@@ -573,7 +584,7 @@
                 const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
                 await Promise.all(deletePromises);
                 alert("已重置所有資料。");
-                drawDisplay.textContent = "準備抽獎";
+                drawDisplay.innerHTML = '<span class="text-4xl font-bold text-white">準備抽獎</span>';
                 drawBtn.innerHTML = '<span class="relative z-10"><i class="fa-solid fa-star"></i> 開始抽獎</span>';
             } catch (err) {
                 console.error("Reset failed", err);
