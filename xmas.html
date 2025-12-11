@@ -180,6 +180,7 @@
                     <div>
                         <h2 class="text-3xl font-bold gold-text">後台管理中心</h2>
                         <p class="text-sm">目前的參加人數: <span id="participantCount" class="text-2xl font-bold text-yellow-400">0</span> 人</p>
+                        <p class="text-sm">已中獎人數: <span id="winnerCount" class="text-xl font-bold text-green-400">0</span> 人</p>
                     </div>
                     <div class="mt-4 md:mt-0 flex gap-2">
                         <button onclick="resetData()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm border border-gray-500">
@@ -214,18 +215,41 @@
                 </div>
             </div>
 
-            <!-- Participant List -->
-            <div class="glass-panel rounded-2xl p-6">
-                <h3 class="text-xl font-bold mb-4 border-b border-gray-500 pb-2">
-                    <i class="fa-solid fa-users"></i> 參加者名單
+            <!-- Winners List Section -->
+            <div class="glass-panel rounded-2xl p-6 mb-6 border-2 border-yellow-500 bg-yellow-900 bg-opacity-30">
+                <h3 class="text-xl font-bold mb-4 border-b border-yellow-500 pb-2 flex items-center">
+                    <i class="fa-solid fa-trophy text-yellow-400 mr-2"></i> 榮譽榜 (中獎名單)
                 </h3>
-                <div class="overflow-y-auto max-h-60 custom-scrollbar">
+                <div class="overflow-y-auto max-h-48 custom-scrollbar">
                     <table class="w-full text-left">
                         <thead class="bg-black bg-opacity-30 text-yellow-400">
                             <tr>
+                                <th class="p-3">序號</th>
                                 <th class="p-3">姓名</th>
                                 <th class="p-3">電話 (末三碼)</th>
-                                <th class="p-3">時間</th>
+                                <th class="p-3">中獎時間</th>
+                            </tr>
+                        </thead>
+                        <tbody id="winnersTableBody" class="divide-y divide-yellow-800 text-yellow-100">
+                            <!-- Winners will be injected here -->
+                        </tbody>
+                    </table>
+                    <p id="noWinnersMsg" class="text-center text-gray-400 py-4 text-sm italic">目前尚未產生中獎者</p>
+                </div>
+            </div>
+
+            <!-- Participant List -->
+            <div class="glass-panel rounded-2xl p-6 opacity-80">
+                <h3 class="text-xl font-bold mb-4 border-b border-gray-500 pb-2">
+                    <i class="fa-solid fa-users"></i> 參加者名單
+                </h3>
+                <div class="overflow-y-auto max-h-40 custom-scrollbar">
+                    <table class="w-full text-left">
+                        <thead class="bg-black bg-opacity-30 text-gray-300">
+                            <tr>
+                                <th class="p-3">姓名</th>
+                                <th class="p-3">電話 (末三碼)</th>
+                                <th class="p-3">登記時間</th>
                             </tr>
                         </thead>
                         <tbody id="participantTableBody" class="divide-y divide-gray-600">
@@ -308,12 +332,15 @@
         const form = document.getElementById('raffleForm');
         const successMsg = document.getElementById('successMessage');
         const tableBody = document.getElementById('participantTableBody');
+        const winnersTableBody = document.getElementById('winnersTableBody');
         const countDisplay = document.getElementById('participantCount');
+        const winnerCountDisplay = document.getElementById('winnerCount');
         const drawDisplay = document.getElementById('scrollingName');
         const drawBtn = document.getElementById('drawBtn');
         const statusEl = document.getElementById('connectionStatus');
         const errorDetails = document.getElementById('errorDetails');
         const errorDetailsText = document.getElementById('errorDetailsText');
+        const noWinnersMsg = document.getElementById('noWinnersMsg');
 
         // Helper for showing errors
         function showError(message, technicalDetail = "") {
@@ -341,8 +368,10 @@
         // --- State ---
         let currentUser = null;
         let participants = [];
+        let winners = [];
         let isDrawing = false;
         const COLLECTION_NAME = 'participants';
+        const WINNERS_COLLECTION_NAME = 'winners';
 
         // --- Auth ---
         const initAuth = async () => {
@@ -386,22 +415,22 @@
                     currentUser = user;
                     statusEl.innerHTML = '<span class="text-green-300"><i class="fa-solid fa-circle-check"></i> 伺服器連線成功</span>';
                     errorDetails.classList.add('hidden'); // Hide error box if success
-                    setupRealtimeListener();
+                    setupRealtimeListeners();
                 }
             });
         }
 
         // --- Firestore Logic ---
-        function getCollectionRef() {
-            return collection(db, 'artifacts', appId, 'public', 'data', COLLECTION_NAME);
+        function getCollectionRef(name) {
+            return collection(db, 'artifacts', appId, 'public', 'data', name);
         }
 
-        function setupRealtimeListener() {
+        function setupRealtimeListeners() {
             if (!currentUser) return;
             
-            const q = query(getCollectionRef(), orderBy('timestamp', 'desc'));
-            
-            onSnapshot(q, (snapshot) => {
+            // Listener for Participants
+            const qParticipants = query(getCollectionRef(COLLECTION_NAME), orderBy('timestamp', 'desc'));
+            onSnapshot(qParticipants, (snapshot) => {
                 participants = [];
                 tableBody.innerHTML = '';
                 
@@ -421,15 +450,49 @@
                     `;
                     tableBody.appendChild(row);
                 });
-
                 countDisplay.textContent = participants.length;
             }, (error) => {
-                console.error("Error listening to data:", error);
-                if (error.code === 'permission-denied') {
-                    showError("讀取權限不足 (Permission Denied)。", "請到 Firebase Console > Firestore > Rules，將規則改為 'allow read, write: if true;'");
+                console.error("Error listening to participants:", error);
+            });
+
+            // Listener for Winners
+            const qWinners = query(getCollectionRef(WINNERS_COLLECTION_NAME), orderBy('timestamp', 'asc')); // Oldest first (Rank 1, 2, 3...)
+            onSnapshot(qWinners, (snapshot) => {
+                winners = [];
+                winnersTableBody.innerHTML = '';
+                
+                if (snapshot.empty) {
+                    noWinnersMsg.classList.remove('hidden');
                 } else {
-                    showError("讀取資料失敗。", error.code);
+                    noWinnersMsg.classList.add('hidden');
+                    let rank = 1;
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        winners.push({ id: doc.id, ...data });
+                        
+                        const row = document.createElement('tr');
+                        row.className = 'bg-yellow-900 bg-opacity-20 hover:bg-opacity-40 transition-colors border-b border-yellow-800';
+                        const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
+                        const phoneDisplay = data.phone.length > 3 ? '***' + data.phone.slice(-3) : data.phone;
+                        
+                        // Highlight the rank
+                        const rankHtml = rank <= 3 
+                            ? `<span class="inline-block w-8 h-8 rounded-full bg-yellow-500 text-black font-bold flex items-center justify-center">${rank}</span>` 
+                            : `<span class="text-gray-300 pl-2">#${rank}</span>`;
+
+                        row.innerHTML = `
+                            <td class="p-3">${rankHtml}</td>
+                            <td class="p-3 font-bold text-yellow-200 text-lg">${escapeHtml(data.name)}</td>
+                            <td class="p-3 font-mono">${escapeHtml(phoneDisplay)}</td>
+                            <td class="p-3 text-xs text-yellow-500 opacity-70">${time}</td>
+                        `;
+                        winnersTableBody.appendChild(row); // Append to bottom since we sort by ASC
+                        rank++;
+                    });
                 }
+                winnerCountDisplay.textContent = winners.length;
+            }, (error) => {
+                console.error("Error listening to winners:", error);
             });
         }
 
@@ -452,12 +515,11 @@
             if (!name || !phone) return;
 
             try {
-                // 1. 先鎖定按鈕
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 檢查中...';
 
-                // 2. 檢查是否重複 (Duplicate Check)
-                const q = query(getCollectionRef(), where("phone", "==", phone));
+                // Check Duplicates
+                const q = query(getCollectionRef(COLLECTION_NAME), where("phone", "==", phone));
                 const querySnapshot = await getDocs(q);
 
                 if (!querySnapshot.empty) {
@@ -467,28 +529,24 @@
                     return; 
                 }
 
-                // 3. 沒有重複，開始寫入
                 submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 處理中...';
 
-                await addDoc(getCollectionRef(), {
+                await addDoc(getCollectionRef(COLLECTION_NAME), {
                     name: name,
                     phone: phone,
                     timestamp: Date.now(),
                     userId: currentUser.uid
                 });
 
-                // Show Success
                 form.classList.add('hidden');
                 successMsg.classList.remove('hidden');
-                
                 nameInput.value = '';
                 phoneInput.value = '';
 
             } catch (err) {
                 console.error("Error adding document:", err);
                 if (err.code === 'permission-denied') {
-                    alert("寫入失敗：權限不足。\n\n請到 Firebase Console > Firestore Database > Rules\n將規則修改為允許寫入 (allow read, write: if true;)");
-                    showError("寫入權限不足 (Permission Denied)。", "請到 Firebase Console 修改 Firestore Rules 為 'if true'");
+                    alert("寫入失敗：權限不足。\n\n請到 Firebase Console > Firestore > Rules\n將規則修改為 allow read, write: if true;");
                 } else {
                     alert("發生錯誤: " + err.message);
                 }
@@ -505,10 +563,22 @@
 
         // --- Draw Logic (Admin) ---
         drawBtn.addEventListener('click', () => {
-            if (participants.length === 0) {
-                alert("目前沒有參加者！");
+            // Filter out existing winners from the draw pool
+            // We use 'phone' as unique identifier
+            const eligibleParticipants = participants.filter(p => {
+                // Return true if this person's phone is NOT in the winners array
+                return !winners.some(w => w.phone === p.phone);
+            });
+
+            if (eligibleParticipants.length === 0) {
+                if (participants.length > 0) {
+                    alert("所有參加者都已經中獎了！恭喜！");
+                } else {
+                    alert("目前沒有參加者！");
+                }
                 return;
             }
+
             if (isDrawing) return;
 
             isDrawing = true;
@@ -524,28 +594,27 @@
             
             // Rolling animation
             const interval = setInterval(() => {
-                const randomIdx = Math.floor(Math.random() * participants.length);
+                const randomIdx = Math.floor(Math.random() * eligibleParticipants.length);
                 // Rolling only shows Name to keep it clean fast
-                drawDisplay.textContent = participants[randomIdx].name;
+                drawDisplay.textContent = eligibleParticipants[randomIdx].name;
                 counter++;
 
                 if (counter > maxIterations) {
                     clearInterval(interval);
-                    finalizeWinner();
+                    finalizeWinner(eligibleParticipants);
                 }
             }, 100);
         });
 
-        function finalizeWinner() {
-            // Actually pick a winner
-            const winnerIdx = Math.floor(Math.random() * participants.length);
-            const winner = participants[winnerIdx];
+        async function finalizeWinner(eligiblePool) {
+            // Pick from the ELIGIBLE pool, not the full participant list
+            const winnerIdx = Math.floor(Math.random() * eligiblePool.length);
+            const winner = eligiblePool[winnerIdx];
             const phoneLast3 = winner.phone.length > 3 ? winner.phone.slice(-3) : winner.phone;
 
             // Visual Stop
             drawDisplay.classList.remove('rolling');
             
-            // 這裡修改：顯示 姓名 + 電話末三碼
             drawDisplay.innerHTML = `
                 <div class="flex flex-col items-center">
                     <div class="text-4xl md:text-5xl mb-2">${escapeHtml(winner.name)}</div>
@@ -558,8 +627,21 @@
             drawDisplay.classList.add('winner-animation', 'text-yellow-300');
             drawDisplay.style.textShadow = '0 0 10px #ff0000, 0 0 20px #ff0000';
             
-            // Confetti/Effects could go here
             createFireworks();
+
+            // Save Winner to Database
+            try {
+                await addDoc(getCollectionRef(WINNERS_COLLECTION_NAME), {
+                    name: winner.name,
+                    phone: winner.phone,
+                    originalId: winner.id, // Keep reference to participant doc
+                    timestamp: Date.now(),
+                    winnerRank: winners.length + 1 // Simple client-side ranking logic
+                });
+            } catch (err) {
+                console.error("Error saving winner:", err);
+                alert("儲存中獎者資料失敗！請手動記錄！");
+            }
 
             isDrawing = false;
             drawBtn.disabled = false;
@@ -577,18 +659,33 @@
 
         // --- Admin/UI Management ---
         window.resetData = async () => {
-            if (!confirm("確定要刪除所有參加者名單嗎？此動作無法復原！")) return;
+            if (!confirm("確定要【重置活動】嗎？\n\n警告：這將會刪除所有「參加者」以及「中獎名單」的資料！此動作無法復原！")) return;
             
+            const btn = document.querySelector('button[onclick="resetData()"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 刪除中...';
+            btn.disabled = true;
+
             try {
-                const snapshot = await getDocs(getCollectionRef());
-                const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
-                await Promise.all(deletePromises);
-                alert("已重置所有資料。");
+                // Delete Participants
+                const snapshotP = await getDocs(getCollectionRef(COLLECTION_NAME));
+                const deletePromisesP = snapshotP.docs.map(d => deleteDoc(d.ref));
+                
+                // Delete Winners
+                const snapshotW = await getDocs(getCollectionRef(WINNERS_COLLECTION_NAME));
+                const deletePromisesW = snapshotW.docs.map(d => deleteDoc(d.ref));
+
+                await Promise.all([...deletePromisesP, ...deletePromisesW]);
+                
+                alert("已重置所有資料 (參加者 & 中獎者)。");
                 drawDisplay.innerHTML = '<span class="text-4xl font-bold text-white">準備抽獎</span>';
                 drawBtn.innerHTML = '<span class="relative z-10"><i class="fa-solid fa-star"></i> 開始抽獎</span>';
             } catch (err) {
                 console.error("Reset failed", err);
                 alert("重置失敗: " + err.message);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
             }
         };
 
