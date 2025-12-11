@@ -136,10 +136,17 @@
                 <i class="fa-solid fa-ticket text-5xl text-yellow-400 mb-4"></i>
                 <h2 class="text-2xl font-bold mb-2">登記參加抽獎</h2>
                 <p class="text-sm opacity-80">填寫資料，將有機會獲得大獎！</p>
-                <!-- Debug Status Indicator -->
-                <p id="connectionStatus" class="text-xs mt-2 text-yellow-300 animate-pulse">
-                    <i class="fa-solid fa-circle-notch fa-spin"></i> 正在連線到伺服器...
-                </p>
+                
+                <!-- Status & Error Display -->
+                <div id="connectionStatus" class="mt-4 text-xs font-bold transition-all p-2 rounded">
+                    <span class="text-yellow-300"><i class="fa-solid fa-circle-notch fa-spin"></i> 正在連線到伺服器...</span>
+                </div>
+                
+                <!-- Detailed Error Box (Hidden by default) -->
+                <div id="errorDetails" class="hidden mt-4 text-left p-3 bg-red-900/90 border border-red-400 rounded text-xs text-red-100">
+                    <h4 class="font-bold mb-1 text-white"><i class="fa-solid fa-bug"></i> 診斷報告：</h4>
+                    <p id="errorDetailsText">...</p>
+                </div>
             </div>
 
             <form id="raffleForm" class="space-y-4">
@@ -277,8 +284,6 @@
         };
 
         // 自動判斷環境：
-        // 1. 如果是在 AI 對話視窗，使用自動注入的變數 (__firebase_config)
-        // 2. 如果是在 GitHub / 本地端，使用上方的 manualConfig
         let finalConfig;
         let finalAppId;
 
@@ -295,23 +300,6 @@
             finalAppId = 'christmas-raffle-v1';
         }
 
-        // 檢查是否已設定 (若在 GitHub 上且未設定，跳出警告)
-        if (typeof __firebase_config === 'undefined' && finalConfig.apiKey === "替換成您的_apiKey") {
-            alert("⚠️ 尚未設定 Firebase！\n\n程式無法連線資料庫，按鈕將無反應。\n\n請用文字編輯器打開此 HTML 檔案，\n搜尋 'const manualConfig' 並填入您的設定。");
-            console.error("Firebase config not set! Please fill in manualConfig object.");
-        }
-        
-        const app = initializeApp(finalConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = finalAppId;
-
-        // --- State ---
-        let currentUser = null;
-        let participants = [];
-        let isDrawing = false;
-        const COLLECTION_NAME = 'participants';
-
         // --- DOM Elements ---
         const views = {
             reg: document.getElementById('registrationView'),
@@ -324,51 +312,84 @@
         const drawDisplay = document.getElementById('scrollingName');
         const drawBtn = document.getElementById('drawBtn');
         const statusEl = document.getElementById('connectionStatus');
+        const errorDetails = document.getElementById('errorDetails');
+        const errorDetailsText = document.getElementById('errorDetailsText');
+
+        // Helper for showing errors
+        function showError(message, technicalDetail = "") {
+            statusEl.innerHTML = '<span class="text-red-400"><i class="fa-solid fa-circle-xmark"></i> 連線發生錯誤</span>';
+            errorDetails.classList.remove('hidden');
+            errorDetailsText.innerText = message + (technicalDetail ? "\n\n(技術代碼: " + technicalDetail + ")" : "");
+        }
+
+        // 檢查 Config 狀態
+        let app, auth, db, appId;
+        
+        if (typeof __firebase_config === 'undefined' && finalConfig.apiKey.includes("替換成您的")) {
+            showError("Firebase 設定未填寫！", "請用文字編輯器開啟檔案，修改 'manualConfig' 區塊。");
+        } else {
+            try {
+                app = initializeApp(finalConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                appId = finalAppId;
+            } catch (e) {
+                showError("Firebase 初始化失敗，請檢查 Config 格式。", e.message);
+            }
+        }
+
+        // --- State ---
+        let currentUser = null;
+        let participants = [];
+        let isDrawing = false;
+        const COLLECTION_NAME = 'participants';
 
         // --- Auth ---
         const initAuth = async () => {
+            if (!auth) return;
+
              if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                 try {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } catch(e) {
-                    console.warn("AI Token login failed, switching to anonymous.", e);
-                    try {
-                        await signInAnonymously(auth);
-                    } catch (anonErr) {
-                         console.error("Anonymous login failed", anonErr);
-                         alert("無法連線到資料庫 (登入失敗)。請檢查 Firebase 設定是否正確 (API Key)。\n錯誤訊息: " + anonErr.message);
-                         statusEl.innerHTML = '<i class="fa-solid fa-circle-xmark text-red-500"></i> 連線失敗 (設定錯誤)';
-                         statusEl.className = "text-xs mt-2 text-red-300 font-bold";
-                    }
+                    console.warn("Token login failed, switching to anonymous.", e);
+                    attemptAnonymousLogin();
                 }
             } else {
-                try {
-                    await signInAnonymously(auth);
-                } catch (e) {
-                    console.error("Anonymous login failed", e);
-                    // 只有在不是 AI 環境下才跳出這個錯誤，避免干擾預覽
-                    if (typeof __firebase_config === 'undefined') {
-                        alert("無法連線到資料庫 (登入失敗)。\n請檢查您的 'manualConfig' 是否已正確填入 Firebase 資料。\n\n錯誤: " + e.message);
-                    }
-                    statusEl.innerHTML = '<i class="fa-solid fa-circle-xmark text-red-500"></i> 連線失敗 (請檢查設定)';
-                    statusEl.className = "text-xs mt-2 text-red-300 font-bold";
-                }
+                attemptAnonymousLogin();
             }
         };
-        initAuth();
 
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                statusEl.innerHTML = '<i class="fa-solid fa-circle-check text-green-400"></i> 伺服器連線成功';
-                statusEl.className = "text-xs mt-2 text-green-300";
-                setupRealtimeListener();
+        const attemptAnonymousLogin = async () => {
+            try {
+                await signInAnonymously(auth);
+            } catch (e) {
+                console.error("Auth failed", e);
+                let userMsg = "無法登入資料庫。";
+                if (e.code === 'auth/operation-not-allowed') {
+                    userMsg = "請至 Firebase Console 開啟 'Anonymous' (匿名) 登入功能。";
+                } else if (e.code === 'auth/api-key-not-valid') {
+                    userMsg = "API Key 無效，請檢查 manualConfig 設定。";
+                }
+                showError(userMsg, e.code);
             }
-        });
+        };
+
+        if (auth) initAuth();
+
+        if (auth) {
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    statusEl.innerHTML = '<span class="text-green-300"><i class="fa-solid fa-circle-check"></i> 伺服器連線成功</span>';
+                    errorDetails.classList.add('hidden'); // Hide error box if success
+                    setupRealtimeListener();
+                }
+            });
+        }
 
         // --- Firestore Logic ---
         function getCollectionRef() {
-            // Using public data so host can see everyone's entries
             return collection(db, 'artifacts', appId, 'public', 'data', COLLECTION_NAME);
         }
 
@@ -385,7 +406,6 @@
                     const data = doc.data();
                     participants.push({ id: doc.id, ...data });
                     
-                    // Render row (only if admin view is active or strictly updating data)
                     const row = document.createElement('tr');
                     row.className = 'hover:bg-white hover:bg-opacity-10 transition-colors';
                     const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
@@ -402,7 +422,11 @@
                 countDisplay.textContent = participants.length;
             }, (error) => {
                 console.error("Error listening to data:", error);
-                statusEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 讀取資料失敗 (權限/設定)';
+                if (error.code === 'permission-denied') {
+                    showError("讀取權限不足 (Permission Denied)。", "請到 Firebase Console > Firestore > Rules，將規則改為 'allow read, write: if true;'");
+                } else {
+                    showError("讀取資料失敗。", error.code);
+                }
             });
         }
 
@@ -410,9 +434,8 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            // 檢查使用者是否已登入
             if (!currentUser) {
-                alert("尚未連線到伺服器！\n\n可能原因：\n1. Firebase 設定有誤 (API Key)\n2. 網路連線不穩\n\n請檢查程式碼中的 manualConfig 設定，或重新整理網頁。");
+                alert("尚未連線到伺服器！請查看上方的錯誤診斷訊息。");
                 return;
             }
 
@@ -433,20 +456,24 @@
                     name: name,
                     phone: phone,
                     timestamp: Date.now(),
-                    userId: currentUser.uid // Track who added it
+                    userId: currentUser.uid
                 });
 
                 // Show Success
                 form.classList.add('hidden');
                 successMsg.classList.remove('hidden');
                 
-                // Clear inputs
                 nameInput.value = '';
                 phoneInput.value = '';
 
             } catch (err) {
                 console.error("Error adding document:", err);
-                alert("發生錯誤，無法送出資料。\n\n請確認您的 Firestore 資料庫規則是否允許寫入，或檢查 Firebase 設定。\n錯誤代碼: " + err.code);
+                if (err.code === 'permission-denied') {
+                    alert("寫入失敗：權限不足。\n\n請到 Firebase Console > Firestore Database > Rules\n將規則修改為允許寫入 (allow read, write: if true;)");
+                    showError("寫入權限不足 (Permission Denied)。", "請到 Firebase Console 修改 Firestore Rules 為 'if true'");
+                } else {
+                    alert("發生錯誤: " + err.message);
+                }
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane mr-2"></i> 確認送出';
@@ -529,7 +556,7 @@
                 drawBtn.innerHTML = '<span class="relative z-10"><i class="fa-solid fa-star"></i> 開始抽獎</span>';
             } catch (err) {
                 console.error("Reset failed", err);
-                alert("重置失敗");
+                alert("重置失敗: " + err.message);
             }
         };
 
