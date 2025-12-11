@@ -733,6 +733,14 @@
 
             if (isDrawing) return;
 
+            // Feature: Auto-close registration on draw start
+            if (isRegistrationOpen) {
+                const settingsDocRef = doc(getCollectionRef(SETTINGS_COLLECTION_NAME), 'config');
+                setDoc(settingsDocRef, { isOpen: false }, { merge: true })
+                    .then(() => console.log("Registration auto-closed due to draw start."))
+                    .catch(err => console.error("Error auto-closing registration:", err));
+            }
+
             isDrawing = true;
             drawBtn.disabled = true;
             drawDisplay.classList.add('rolling');
