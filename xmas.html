@@ -87,6 +87,11 @@
             box-shadow: 0 0 0 #8b0000;
         }
 
+        .btn-stop {
+            background: linear-gradient(to bottom, #555, #333);
+            border: 2px solid #999;
+        }
+
         .gold-text {
             color: #ffd700;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
@@ -131,47 +136,84 @@
     <main class="w-full max-w-md md:max-w-2xl p-4 z-10 relative flex-grow">
         
         <!-- Registration View (Default) -->
-        <div id="registrationView" class="glass-panel rounded-2xl p-6 md:p-8 w-full max-w-md mx-auto transition-all duration-300">
-            <div class="text-center mb-6">
-                <i class="fa-solid fa-ticket text-5xl text-yellow-400 mb-4"></i>
-                <h2 class="text-2xl font-bold mb-2">登記參加抽獎</h2>
-                <p class="text-sm opacity-80">填寫資料，將有機會獲得大獎！</p>
-                
-                <!-- Status & Error Display -->
-                <div id="connectionStatus" class="mt-4 text-xs font-bold transition-all p-2 rounded">
-                    <span class="text-yellow-300"><i class="fa-solid fa-circle-notch fa-spin"></i> 正在連線到伺服器...</span>
+        <div id="registrationView" class="w-full max-w-md mx-auto transition-all duration-300">
+            
+            <!-- Registration Form Area -->
+            <div id="regFormContainer" class="glass-panel rounded-2xl p-6 md:p-8 mb-6">
+                <div class="text-center mb-6">
+                    <i class="fa-solid fa-ticket text-5xl text-yellow-400 mb-4"></i>
+                    <h2 class="text-2xl font-bold mb-2">登記參加抽獎</h2>
+                    <p class="text-sm opacity-80">填寫資料，將有機會獲得大獎！</p>
+                    
+                    <!-- Status Indicator -->
+                    <div id="connectionStatus" class="mt-4 text-xs font-bold transition-all p-2 rounded">
+                        <span class="text-yellow-300"><i class="fa-solid fa-circle-notch fa-spin"></i> 正在連線到伺服器...</span>
+                    </div>
                 </div>
-                
-                <!-- Detailed Error Box (Hidden by default) -->
-                <div id="errorDetails" class="hidden mt-4 text-left p-3 bg-red-900/90 border border-red-400 rounded text-xs text-red-100">
-                    <h4 class="font-bold mb-1 text-white"><i class="fa-solid fa-bug"></i> 診斷報告：</h4>
-                    <p id="errorDetailsText">...</p>
+
+                <form id="raffleForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold mb-1 ml-1">您的姓名 / Name</label>
+                        <input type="text" id="guestName" required placeholder="請輸入姓名" 
+                            class="input-christmas w-full p-3 rounded-lg outline-none focus:ring-4 focus:ring-yellow-400">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold mb-1 ml-1">手機號碼 / Phone</label>
+                        <input type="tel" id="guestPhone" required placeholder="0912-345-678" 
+                            oninput="this.value = this.value.replace(/[^0-9-]/g, '')"
+                            class="input-christmas w-full p-3 rounded-lg outline-none focus:ring-4 focus:ring-yellow-400">
+                        <p class="text-xs text-gray-300 mt-1 ml-1">* 只可輸入數字與減號 (-)</p>
+                    </div>
+                    <button type="submit" class="btn-christmas w-full py-4 rounded-lg text-xl font-bold mt-4 text-white">
+                        <i class="fa-solid fa-paper-plane mr-2"></i> 確認送出
+                    </button>
+                </form>
+
+                <div id="successMessage" class="hidden text-center mt-6 p-4 bg-green-800 bg-opacity-80 rounded-lg border-2 border-green-400">
+                    <i class="fa-solid fa-check-circle text-4xl text-green-300 mb-2"></i>
+                    <h3 class="text-xl font-bold">登記成功！</h3>
+                    <p>請留意晚會抽獎環節</p>
+                    <button id="registerAgainBtn" class="mt-4 text-sm underline text-gray-300 hover:text-white">重新登記</button>
+                </div>
+
+                <!-- Registration Closed Message -->
+                <div id="registrationClosedMsg" class="hidden text-center py-8">
+                    <i class="fa-solid fa-lock text-5xl text-gray-400 mb-4"></i>
+                    <h3 class="text-2xl font-bold text-gray-200">報名已截止</h3>
+                    <p class="text-gray-400 mt-2">主持人已關閉報名通道，請關注下方開獎名單！</p>
                 </div>
             </div>
 
-            <form id="raffleForm" class="space-y-4">
-                <div>
-                    <label class="block text-sm font-bold mb-1 ml-1">您的姓名 / Name</label>
-                    <input type="text" id="guestName" required placeholder="請輸入姓名" 
-                        class="input-christmas w-full p-3 rounded-lg outline-none focus:ring-4 focus:ring-yellow-400">
-                </div>
-                <div>
-                    <label class="block text-sm font-bold mb-1 ml-1">手機號碼 / Phone</label>
-                    <input type="tel" id="guestPhone" required placeholder="0912-345-678" 
-                        oninput="this.value = this.value.replace(/[^0-9-]/g, '')"
-                        class="input-christmas w-full p-3 rounded-lg outline-none focus:ring-4 focus:ring-yellow-400">
-                    <p class="text-xs text-gray-300 mt-1 ml-1">* 只可輸入數字與減號 (-)，例如 0912-345-678</p>
-                </div>
-                <button type="submit" class="btn-christmas w-full py-4 rounded-lg text-xl font-bold mt-4 text-white">
-                    <i class="fa-solid fa-paper-plane mr-2"></i> 確認送出
-                </button>
-            </form>
+             <!-- Detailed Error Box (Hidden by default) -->
+             <div id="errorDetails" class="hidden mb-6 text-left p-3 bg-red-900/90 border border-red-400 rounded text-xs text-red-100">
+                <h4 class="font-bold mb-1 text-white"><i class="fa-solid fa-bug"></i> 診斷報告：</h4>
+                <p id="errorDetailsText">...</p>
+            </div>
 
-            <div id="successMessage" class="hidden text-center mt-6 p-4 bg-green-800 bg-opacity-80 rounded-lg border-2 border-green-400">
-                <i class="fa-solid fa-check-circle text-4xl text-green-300 mb-2"></i>
-                <h3 class="text-xl font-bold">登記成功！</h3>
-                <p>請留意晚會抽獎環節</p>
-                <button id="registerAgainBtn" class="mt-4 text-sm underline text-gray-300 hover:text-white">重新登記</button>
+            <!-- Guest Winners List (Syncs with Admin) -->
+            <div id="guestWinnersSection" class="glass-panel rounded-2xl p-6 border-2 border-yellow-500 bg-yellow-900 bg-opacity-30">
+                <h3 class="text-xl font-bold mb-4 border-b border-yellow-500 pb-2 flex items-center justify-between">
+                    <span><i class="fa-solid fa-trophy text-yellow-400 mr-2"></i> 中獎名單</span>
+                    <span class="text-xs font-normal bg-yellow-600 px-2 py-1 rounded text-black">即時更新</span>
+                </h3>
+                <div class="overflow-y-auto max-h-60 custom-scrollbar">
+                    <table class="w-full text-left">
+                        <thead class="bg-black bg-opacity-30 text-yellow-400 text-sm">
+                            <tr>
+                                <th class="p-2">序號</th>
+                                <th class="p-2">姓名</th>
+                                <th class="p-2">末三碼</th>
+                            </tr>
+                        </thead>
+                        <tbody id="guestWinnersTableBody" class="divide-y divide-yellow-800 text-yellow-100">
+                            <!-- Winners injected here -->
+                        </tbody>
+                    </table>
+                    <p id="guestNoWinnersMsg" class="text-center text-gray-400 py-6 text-sm italic">
+                        <i class="fa-solid fa-gift mb-2 text-2xl block"></i>
+                        抽獎準備中...
+                    </p>
+                </div>
             </div>
         </div>
 
@@ -181,10 +223,17 @@
                 <div class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-gray-500 pb-4">
                     <div>
                         <h2 class="text-3xl font-bold gold-text">後台管理中心</h2>
-                        <p class="text-sm">目前的參加人數: <span id="participantCount" class="text-2xl font-bold text-yellow-400">0</span> 人</p>
-                        <p class="text-sm">已中獎人數: <span id="winnerCount" class="text-xl font-bold text-green-400">0</span> 人</p>
+                        <div class="flex gap-4 mt-2">
+                            <p class="text-sm">參加人數: <span id="participantCount" class="text-xl font-bold text-white">0</span></p>
+                            <p class="text-sm">中獎人數: <span id="winnerCount" class="text-xl font-bold text-green-400">0</span></p>
+                        </div>
                     </div>
-                    <div class="mt-4 md:mt-0 flex gap-2">
+                    <div class="mt-4 md:mt-0 flex flex-wrap gap-2 justify-center">
+                        <!-- Toggle Registration Button -->
+                        <button id="toggleRegBtn" onclick="toggleRegistration()" class="px-4 py-2 rounded text-sm font-bold border border-green-500 bg-green-700 hover:bg-green-600 transition-colors shadow-lg">
+                            <i class="fa-solid fa-door-open"></i> 開放報名中
+                        </button>
+                        
                         <button onclick="resetData()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm border border-gray-500">
                             <i class="fa-solid fa-trash-can"></i> 重置活動
                         </button>
@@ -217,7 +266,7 @@
                 </div>
             </div>
 
-            <!-- Winners List Section -->
+            <!-- Winners List Section (Admin) -->
             <div class="glass-panel rounded-2xl p-6 mb-6 border-2 border-yellow-500 bg-yellow-900 bg-opacity-30">
                 <h3 class="text-xl font-bold mb-4 border-b border-yellow-500 pb-2 flex items-center">
                     <i class="fa-solid fa-trophy text-yellow-400 mr-2"></i> 榮譽榜 (中獎名單)
@@ -289,7 +338,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, getDocs, doc, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, getDocs, doc, where, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Config & Init ---
         // ⚠️ 部署到 GitHub Pages 前的必做設定 / REQUIRED SETUP FOR GITHUB PAGES
@@ -332,17 +381,22 @@
             admin: document.getElementById('adminView')
         };
         const form = document.getElementById('raffleForm');
+        const regFormContainer = document.getElementById('regFormContainer');
+        const regClosedMsg = document.getElementById('registrationClosedMsg');
         const successMsg = document.getElementById('successMessage');
         const tableBody = document.getElementById('participantTableBody');
         const winnersTableBody = document.getElementById('winnersTableBody');
+        const guestWinnersTableBody = document.getElementById('guestWinnersTableBody');
         const countDisplay = document.getElementById('participantCount');
         const winnerCountDisplay = document.getElementById('winnerCount');
         const drawDisplay = document.getElementById('scrollingName');
         const drawBtn = document.getElementById('drawBtn');
+        const toggleRegBtn = document.getElementById('toggleRegBtn');
         const statusEl = document.getElementById('connectionStatus');
         const errorDetails = document.getElementById('errorDetails');
         const errorDetailsText = document.getElementById('errorDetailsText');
         const noWinnersMsg = document.getElementById('noWinnersMsg');
+        const guestNoWinnersMsg = document.getElementById('guestNoWinnersMsg');
 
         // Helper for showing errors
         function showError(message, technicalDetail = "") {
@@ -372,8 +426,11 @@
         let participants = [];
         let winners = [];
         let isDrawing = false;
+        let isRegistrationOpen = true;
+
         const COLLECTION_NAME = 'participants';
         const WINNERS_COLLECTION_NAME = 'winners';
+        const SETTINGS_COLLECTION_NAME = 'app_settings';
 
         // --- Auth ---
         const initAuth = async () => {
@@ -430,7 +487,7 @@
         function setupRealtimeListeners() {
             if (!currentUser) return;
             
-            // Listener for Participants
+            // 1. Listen for Participants
             const qParticipants = query(getCollectionRef(COLLECTION_NAME), orderBy('timestamp', 'desc'));
             onSnapshot(qParticipants, (snapshot) => {
                 participants = [];
@@ -457,27 +514,31 @@
                 console.error("Error listening to participants:", error);
             });
 
-            // Listener for Winners
-            const qWinners = query(getCollectionRef(WINNERS_COLLECTION_NAME), orderBy('timestamp', 'asc')); // Oldest first (Rank 1, 2, 3...)
+            // 2. Listen for Winners (Populates both Admin and Guest lists)
+            const qWinners = query(getCollectionRef(WINNERS_COLLECTION_NAME), orderBy('timestamp', 'asc')); 
             onSnapshot(qWinners, (snapshot) => {
                 winners = [];
                 winnersTableBody.innerHTML = '';
+                guestWinnersTableBody.innerHTML = '';
                 
                 if (snapshot.empty) {
                     noWinnersMsg.classList.remove('hidden');
+                    guestNoWinnersMsg.classList.remove('hidden');
                 } else {
                     noWinnersMsg.classList.add('hidden');
+                    guestNoWinnersMsg.classList.add('hidden');
                     let rank = 1;
                     snapshot.forEach(doc => {
                         const data = doc.data();
                         winners.push({ id: doc.id, ...data });
                         
+                        // Data formatting
+                        const phoneDisplay = data.phone.length > 3 ? '***' + data.phone.slice(-3) : data.phone;
+                        const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
+                        
+                        // --- Render Admin Table Row ---
                         const row = document.createElement('tr');
                         row.className = 'bg-yellow-900 bg-opacity-20 hover:bg-opacity-40 transition-colors border-b border-yellow-800';
-                        const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
-                        const phoneDisplay = data.phone.length > 3 ? '***' + data.phone.slice(-3) : data.phone;
-                        
-                        // Highlight the rank
                         const rankHtml = rank <= 3 
                             ? `<span class="inline-block w-8 h-8 rounded-full bg-yellow-500 text-black font-bold flex items-center justify-center">${rank}</span>` 
                             : `<span class="text-gray-300 pl-2">#${rank}</span>`;
@@ -488,7 +549,20 @@
                             <td class="p-3 font-mono">${escapeHtml(phoneDisplay)}</td>
                             <td class="p-3 text-xs text-yellow-500 opacity-70">${time}</td>
                         `;
-                        winnersTableBody.appendChild(row); // Append to bottom since we sort by ASC
+                        winnersTableBody.appendChild(row);
+
+                        // --- Render Guest Table Row (Simplified) ---
+                        const guestRow = document.createElement('tr');
+                        guestRow.className = 'border-b border-yellow-800 hover:bg-yellow-800 hover:bg-opacity-30';
+                        guestRow.innerHTML = `
+                            <td class="p-2">${rankHtml}</td>
+                            <td class="p-2 font-bold text-yellow-300">${escapeHtml(data.name)}</td>
+                            <td class="p-2 font-mono text-gray-300">${escapeHtml(phoneDisplay)}</td>
+                        `;
+                        // Insert at top for guests so they see latest first? Or bottom?
+                        // Let's stick to order (rank 1 at top)
+                        guestWinnersTableBody.appendChild(guestRow);
+                        
                         rank++;
                     });
                 }
@@ -496,6 +570,51 @@
             }, (error) => {
                 console.error("Error listening to winners:", error);
             });
+
+            // 3. Listen for Settings (Registration Status)
+            const settingsDocRef = doc(getCollectionRef(SETTINGS_COLLECTION_NAME), 'config');
+            onSnapshot(settingsDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    isRegistrationOpen = docSnap.data().isOpen;
+                } else {
+                    // Default to open if no setting exists
+                    isRegistrationOpen = true; 
+                }
+                updateRegistrationUI();
+            });
+        }
+
+        // --- UI Updates ---
+        function updateRegistrationUI() {
+            // Update Guest View
+            if (isRegistrationOpen) {
+                form.classList.remove('hidden');
+                regClosedMsg.classList.add('hidden');
+                if (successMsg.classList.contains('hidden')) {
+                    // Only show form if success msg is hidden (user hasn't just registered)
+                    form.style.display = 'block';
+                }
+            } else {
+                form.classList.add('hidden');
+                form.style.display = 'none'; // Ensure hidden
+                // Don't hide success message if they just registered, but hide form area
+                if (!successMsg.classList.contains('hidden')) {
+                     // If success msg is showing, keep it, but ensure 'register again' is handled?
+                     // Actually, if closed, we can just show the closed message below or replace.
+                     // Let's just hide form.
+                } else {
+                     regClosedMsg.classList.remove('hidden');
+                }
+            }
+
+            // Update Admin Button
+            if (isRegistrationOpen) {
+                toggleRegBtn.innerHTML = '<i class="fa-solid fa-door-open"></i> 開放報名中';
+                toggleRegBtn.className = "px-4 py-2 rounded text-sm font-bold border border-green-500 bg-green-700 hover:bg-green-600 transition-colors shadow-lg";
+            } else {
+                toggleRegBtn.innerHTML = '<i class="fa-solid fa-door-closed"></i> 已停止報名';
+                toggleRegBtn.className = "px-4 py-2 rounded text-sm font-bold border border-red-500 bg-red-800 hover:bg-red-700 transition-colors shadow-lg";
+            }
         }
 
         // --- Registration Logic ---
@@ -507,13 +626,18 @@
                 return;
             }
 
+            if (!isRegistrationOpen) {
+                alert("報名已經截止囉！");
+                window.location.reload(); // Refresh to update UI
+                return;
+            }
+
             const nameInput = document.getElementById('guestName');
             const phoneInput = document.getElementById('guestPhone');
             const submitBtn = form.querySelector('button[type="submit"]');
 
             const name = nameInput.value.trim();
             const rawPhone = phoneInput.value.trim();
-            // 統一將電話號碼標準化：只保留數字
             const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
 
             if (!name || !cleanPhone) {
@@ -525,7 +649,7 @@
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 檢查中...';
 
-                // Check Duplicates using standardized phone (cleanPhone)
+                // Check Duplicates
                 const q = query(getCollectionRef(COLLECTION_NAME), where("phone", "==", cleanPhone));
                 const querySnapshot = await getDocs(q);
 
@@ -540,7 +664,7 @@
 
                 await addDoc(getCollectionRef(COLLECTION_NAME), {
                     name: name,
-                    phone: cleanPhone, // Save clean digits only to DB
+                    phone: cleanPhone, 
                     timestamp: Date.now(),
                     userId: currentUser.uid
                 });
@@ -553,7 +677,7 @@
             } catch (err) {
                 console.error("Error adding document:", err);
                 if (err.code === 'permission-denied') {
-                    alert("寫入失敗：權限不足。\n\n請到 Firebase Console > Firestore > Rules\n將規則修改為 allow read, write: if true;");
+                    alert("寫入失敗：權限不足。請檢查 Firebase Rules。");
                 } else {
                     alert("發生錯誤: " + err.message);
                 }
@@ -564,16 +688,37 @@
         });
 
         document.getElementById('registerAgainBtn').addEventListener('click', () => {
+            if (!isRegistrationOpen) {
+                alert("目前報名已截止");
+                return;
+            }
             successMsg.classList.add('hidden');
             form.classList.remove('hidden');
+            form.style.display = 'block';
         });
+
+        // --- Admin Actions ---
+        window.toggleRegistration = async () => {
+            if (!currentUser) return;
+            const newState = !isRegistrationOpen;
+            const confirmMsg = newState ? "確定要【開放報名】嗎？" : "確定要【停止報名】嗎？\n停止後，參加者將無法再送出資料。";
+            
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                const settingsDocRef = doc(getCollectionRef(SETTINGS_COLLECTION_NAME), 'config');
+                await setDoc(settingsDocRef, { isOpen: newState }, { merge: true });
+                // UI will update automatically via listener
+            } catch (err) {
+                console.error("Error toggling settings:", err);
+                alert("設定失敗: " + err.message);
+            }
+        };
 
         // --- Draw Logic (Admin) ---
         drawBtn.addEventListener('click', () => {
             // Filter out existing winners from the draw pool
-            // We use 'phone' as unique identifier
             const eligibleParticipants = participants.filter(p => {
-                // Return true if this person's phone is NOT in the winners array
                 return !winners.some(w => w.phone === p.phone);
             });
 
@@ -591,18 +736,15 @@
             isDrawing = true;
             drawBtn.disabled = true;
             drawDisplay.classList.add('rolling');
-            drawDisplay.classList.remove('text-yellow-300', 'scale-125'); // Reset style
+            drawDisplay.classList.remove('text-yellow-300', 'scale-125'); 
             drawDisplay.style.textShadow = 'none';
-            // Reset to default style if needed
             drawDisplay.innerHTML = '<span class="text-4xl font-bold text-white">準備抽獎</span>'; 
 
             let counter = 0;
-            const maxIterations = 30; // How many shuffles before stopping
+            const maxIterations = 30; 
             
-            // Rolling animation
             const interval = setInterval(() => {
                 const randomIdx = Math.floor(Math.random() * eligibleParticipants.length);
-                // Rolling only shows Name to keep it clean fast
                 drawDisplay.textContent = eligibleParticipants[randomIdx].name;
                 counter++;
 
@@ -614,12 +756,10 @@
         });
 
         async function finalizeWinner(eligiblePool) {
-            // Pick from the ELIGIBLE pool, not the full participant list
             const winnerIdx = Math.floor(Math.random() * eligiblePool.length);
             const winner = eligiblePool[winnerIdx];
             const phoneLast3 = winner.phone.length > 3 ? winner.phone.slice(-3) : winner.phone;
 
-            // Visual Stop
             drawDisplay.classList.remove('rolling');
             
             drawDisplay.innerHTML = `
@@ -636,14 +776,13 @@
             
             createFireworks();
 
-            // Save Winner to Database
             try {
                 await addDoc(getCollectionRef(WINNERS_COLLECTION_NAME), {
                     name: winner.name,
                     phone: winner.phone,
-                    originalId: winner.id, // Keep reference to participant doc
+                    originalId: winner.id, 
                     timestamp: Date.now(),
-                    winnerRank: winners.length + 1 // Simple client-side ranking logic
+                    winnerRank: winners.length + 1 
                 });
             } catch (err) {
                 console.error("Error saving winner:", err);
@@ -656,7 +795,6 @@
         }
 
         function createFireworks() {
-            // Simple visual effect placeholder
             const container = document.getElementById('drawDisplay');
             container.style.borderColor = '#fff';
             setTimeout(() => container.style.borderColor = '#fbbf24', 300);
@@ -666,7 +804,7 @@
 
         // --- Admin/UI Management ---
         window.resetData = async () => {
-            if (!confirm("確定要【重置活動】嗎？\n\n警告：這將會刪除所有「參加者」以及「中獎名單」的資料！此動作無法復原！")) return;
+            if (!confirm("確定要【重置活動】嗎？\n\n警告：這將會刪除所有「參加者」及「中獎名單」，並重置報名狀態！此動作無法復原！")) return;
             
             const btn = document.querySelector('button[onclick="resetData()"]');
             const originalText = btn.innerHTML;
@@ -682,9 +820,13 @@
                 const snapshotW = await getDocs(getCollectionRef(WINNERS_COLLECTION_NAME));
                 const deletePromisesW = snapshotW.docs.map(d => deleteDoc(d.ref));
 
-                await Promise.all([...deletePromisesP, ...deletePromisesW]);
+                // Reset Settings to Open
+                const settingsDocRef = doc(getCollectionRef(SETTINGS_COLLECTION_NAME), 'config');
+                const resetSettingsPromise = setDoc(settingsDocRef, { isOpen: true });
+
+                await Promise.all([...deletePromisesP, ...deletePromisesW, resetSettingsPromise]);
                 
-                alert("已重置所有資料 (參加者 & 中獎者)。");
+                alert("已重置所有資料 (參加者 & 中獎者)，報名已重新開放。");
                 drawDisplay.innerHTML = '<span class="text-4xl font-bold text-white">準備抽獎</span>';
                 drawBtn.innerHTML = '<span class="relative z-10"><i class="fa-solid fa-star"></i> 開始抽獎</span>';
             } catch (err) {
