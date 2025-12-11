@@ -250,7 +250,7 @@
     <div id="passwordModal" class="fixed inset-0 bg-black bg-opacity-80 z-50 hidden flex items-center justify-center">
         <div class="bg-white text-gray-900 p-6 rounded-xl max-w-sm w-full mx-4 shadow-2xl border-4 border-[#1a472a]">
             <h3 class="text-xl font-bold mb-4 text-[#1a472a] text-center">請輸入後台密碼</h3>
-            <p class="text-xs text-gray-500 text-center mb-4">(預設密碼: ****)</p>
+            <p class="text-xs text-gray-500 text-center mb-4">(預設密碼: 1225)</p>
             <input type="password" id="adminPassword" class="w-full border-2 border-gray-300 p-2 rounded mb-4 text-center text-lg" placeholder="Password">
             <div class="flex gap-2">
                 <button onclick="closePasswordModal()" class="flex-1 bg-gray-300 py-2 rounded font-bold hover:bg-gray-400">取消</button>
@@ -263,7 +263,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, getDocs, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // 加入了 'where' 用於查詢
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, getDocs, doc, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Config & Init ---
         // ⚠️ 部署到 GitHub Pages 前的必做設定 / REQUIRED SETUP FOR GITHUB PAGES
@@ -366,10 +367,13 @@
             } catch (e) {
                 console.error("Auth failed", e);
                 let userMsg = "無法登入資料庫。";
+                // 詳細錯誤代碼判斷
                 if (e.code === 'auth/operation-not-allowed') {
-                    userMsg = "請至 Firebase Console 開啟 'Anonymous' (匿名) 登入功能。";
+                    userMsg = "請至 Firebase Console > Authentication > Sign-in method \n將 'Anonymous' (匿名) 設為啟用。";
+                } else if (e.code === 'auth/configuration-not-found') {
+                    userMsg = "Authentication 服務尚未啟用。\n請至 Firebase Console 點擊 Authentication 並按下 'Get Started' (開始使用)。";
                 } else if (e.code === 'auth/api-key-not-valid') {
-                    userMsg = "API Key 無效，請檢查 manualConfig 設定。";
+                    userMsg = "API Key 無效，請檢查 manualConfig 設定是否正確。";
                 }
                 showError(userMsg, e.code);
             }
@@ -449,7 +453,24 @@
             if (!name || !phone) return;
 
             try {
+                // 1. 先鎖定按鈕
                 submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 檢查中...';
+
+                // 2. 檢查是否重複 (Duplicate Check)
+                // 查詢資料庫中是否已有此電話號碼
+                const q = query(getCollectionRef(), where("phone", "==", phone));
+                const querySnapshot = await getDocs(q);
+
+                if (!querySnapshot.empty) {
+                    alert("這個電話號碼已經登記過了喔！\n請勿重覆報名。");
+                    // 恢復按鈕狀態
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane mr-2"></i> 確認送出';
+                    return; // 停止執行
+                }
+
+                // 3. 沒有重複，開始寫入
                 submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 處理中...';
 
                 await addDoc(getCollectionRef(), {
@@ -581,7 +602,7 @@
         };
 
         window.checkPassword = () => {
-            if (passInput.value === '0514') {
+            if (passInput.value === '1225') {
                 modal.classList.add('hidden');
                 views.reg.classList.add('hidden');
                 views.admin.classList.remove('hidden');
