@@ -66,15 +66,18 @@
         // --- 1. 設定與初始化 ---
         
         // 部署與預覽環境的 Config 處理
-        const firebaseConfig = {
-            apiKey: "AIzaSyDpihYUzRX09riiiP2gTm81KCR1pbVpFis",
-            authDomain: "xmas-1654f.firebaseapp.com",
-            projectId: "xmas-1654f",
-            storageBucket: "xmas-1654f.firebasestorage.app",
-            messagingSenderId: "171667807726",
-            appId: "1:171667807726:web:639da18d4fb507734f02ff",
-            measurementId: "G-3G4WYVDK4H"
-        };
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                // TODO: 部署到 GitHub Pages 時，請在此填入您的 Firebase Config
+                apiKey: "AIzaSyDpihYUzRX09riiiP2gTm81KCR1pbVpFis",
+                authDomain: "xmas-1654f.firebaseapp.com",
+                projectId: "xmas-1654f",
+                storageBucket: "xmas-1654f.firebasestorage.app",
+                messagingSenderId: "171667807726",
+                appId: "1:171667807726:web:639da18d4fb507734f02ff",
+                measurementId: "G-3G4WYVDK4H"
+            };
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -569,20 +572,30 @@
             
             // 取得當前輸入值
             const formData = new FormData(form);
+            const amountStr = formData.get('amount');
+            
+            // 檢查必填
+            if (!formData.get('item') || !amountStr) {
+                alert('請輸入項目與金額');
+                return;
+            }
+
             const data = {
                 date: formData.get('date'),
                 time: formData.get('time'),
                 item: formData.get('item'),
-                amount: Number(formData.get('amount'))
+                amount: Number(amountStr)
             };
-
-            if (!data.item || !data.amount) return;
 
             submitBtn.disabled = true;
             submitBtn.innerHTML = '儲存中...';
 
             try {
-                await addDoc(collection(db, 'artifacts', appId, 'users', state.user.uid, 'transactions'), {
+                // 使用 addDoc 寫入 Firestore
+                // 路徑: artifacts/{appId}/users/{uid}/transactions
+                const colRef = collection(db, 'artifacts', appId, 'users', state.user.uid, 'transactions');
+                
+                await addDoc(colRef, {
                     ...data,
                     createdAt: serverTimestamp()
                 });
@@ -590,13 +603,15 @@
                 // 重置表單 (保留日期時間)
                 form.querySelector('input[name="item"]').value = '';
                 form.querySelector('input[name="amount"]').value = '';
+                
             } catch (err) {
-                console.error(err);
-                alert('新增失敗');
+                console.error("Add Transaction Error:", err);
+                // 顯示詳細錯誤訊息以便除錯
+                alert(`新增失敗: ${err.message}`);
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = `<i data-lucide="plus-circle" class="w-4 h-4 mr-2"></i> 新增支出`;
-                lucide.createIcons(); // 重新繪製按鈕內的 icon
+                if (window.lucide) window.lucide.createIcons();
             }
         }
 
