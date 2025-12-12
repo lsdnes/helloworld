@@ -242,7 +242,7 @@
             <div class="glass-panel rounded-2xl p-6 md:p-8 mb-6">
                 <div class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-gray-500 pb-4">
                     <div>
-                        <h2 class="text-3xl font-bold gold-text">後台管理中心</h2>
+                        <h2 class="text-3xl font-bold gold-text">後台管理中心 <span id="helperBadge" class="hidden text-sm bg-blue-600 text-white px-2 py-1 rounded ml-2 align-middle">小幫手模式</span></h2>
                         <div class="flex gap-4 mt-2">
                             <p class="text-sm">參加人數: <span id="participantCount" class="text-xl font-bold text-white">0</span></p>
                             <p class="text-sm">中獎人數: <span id="winnerCount" class="text-xl font-bold text-green-400">0</span></p>
@@ -254,7 +254,7 @@
                             <i class="fa-solid fa-door-open"></i> 開放報名中
                         </button>
                         
-                        <button onclick="resetData()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm border border-gray-500">
+                        <button id="resetDataBtn" onclick="resetData()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm border border-gray-500">
                             <i class="fa-solid fa-trash-can"></i> 重置活動
                         </button>
                         <button onclick="exitAdmin()" class="bg-red-800 hover:bg-red-700 px-4 py-2 rounded text-sm border border-red-500">
@@ -272,7 +272,7 @@
                     </div>
 
                     <!-- Draw Control Section -->
-                    <div class="flex flex-col justify-center items-center text-center">
+                    <div id="drawControlSection" class="flex flex-col justify-center items-center text-center">
                         <div id="drawDisplay" class="w-full h-40 bg-black bg-opacity-50 rounded-xl border-4 border-yellow-400 flex items-center justify-center mb-4 overflow-hidden relative p-4">
                             <div id="scrollingName" class="text-4xl font-bold text-white">準備抽獎</div>
                             <div id="fireworks" class="absolute inset-0 pointer-events-none"></div>
@@ -295,7 +295,7 @@
                 <!-- Admin Search Bar -->
                 <div class="mb-4 relative">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-yellow-400"></i>
-                    <input type="text" id="adminSearchInput" placeholder="搜尋姓名或電話末三碼..." class="search-input">
+                    <input type="text" id="adminSearchInput" placeholder="搜尋中獎者姓名或電話末三碼..." class="search-input">
                 </div>
 
                 <div class="overflow-y-auto max-h-48 custom-scrollbar">
@@ -323,6 +323,13 @@
                 <h3 class="text-xl font-bold mb-4 border-b border-gray-500 pb-2">
                     <i class="fa-solid fa-users"></i> 參加者名單
                 </h3>
+                
+                <!-- Admin Participant Search Bar -->
+                <div class="mb-4 relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400"></i>
+                    <input type="text" id="adminParticipantSearchInput" placeholder="搜尋參加者姓名或電話..." class="search-input border-gray-500 focus:border-white">
+                </div>
+
                 <div class="overflow-y-auto max-h-40 custom-scrollbar">
                     <table class="w-full text-left">
                         <thead class="bg-black bg-opacity-30 text-gray-300">
@@ -336,6 +343,7 @@
                             <!-- Rows will be injected here -->
                         </tbody>
                     </table>
+                    <p id="adminPartNoMatchMsg" class="text-center text-gray-400 py-4 text-sm italic hidden">查無符合資料</p>
                 </div>
             </div>
         </div>
@@ -420,6 +428,10 @@
         const drawDisplay = document.getElementById('scrollingName');
         const drawBtn = document.getElementById('drawBtn');
         const toggleRegBtn = document.getElementById('toggleRegBtn');
+        const resetDataBtn = document.getElementById('resetDataBtn');
+        const drawControlSection = document.getElementById('drawControlSection');
+        const helperBadge = document.getElementById('helperBadge');
+        
         const statusEl = document.getElementById('connectionStatus');
         const errorDetails = document.getElementById('errorDetails');
         const errorDetailsText = document.getElementById('errorDetailsText');
@@ -428,9 +440,11 @@
         const adminNoMatchMsg = document.getElementById('adminNoMatchMsg');
         const guestNoWinnersMsg = document.getElementById('guestNoWinnersMsg');
         const guestNoMatchMsg = document.getElementById('guestNoMatchMsg');
+        const adminPartNoMatchMsg = document.getElementById('adminPartNoMatchMsg');
         
         const adminSearchInput = document.getElementById('adminSearchInput');
         const guestSearchInput = document.getElementById('guestSearchInput');
+        const adminParticipantSearchInput = document.getElementById('adminParticipantSearchInput');
 
         // Helper for showing errors
         function showError(message, technicalDetail = "") {
@@ -461,6 +475,7 @@
         let winners = [];
         let isDrawing = false;
         let isRegistrationOpen = true;
+        let currentRole = 'admin'; // 'admin' or 'helper'
 
         const COLLECTION_NAME = 'participants';
         const WINNERS_COLLECTION_NAME = 'winners';
@@ -525,25 +540,11 @@
             const qParticipants = query(getCollectionRef(COLLECTION_NAME), orderBy('timestamp', 'desc'));
             onSnapshot(qParticipants, (snapshot) => {
                 participants = [];
-                tableBody.innerHTML = '';
-                
                 snapshot.forEach(doc => {
-                    const data = doc.data();
-                    participants.push({ id: doc.id, ...data });
-                    
-                    const row = document.createElement('tr');
-                    row.className = 'hover:bg-white hover:bg-opacity-10 transition-colors';
-                    const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
-                    const phoneDisplay = data.phone.length > 3 ? '***' + data.phone.slice(-3) : data.phone;
-                    
-                    row.innerHTML = `
-                        <td class="p-3 font-bold text-white">${escapeHtml(data.name)}</td>
-                        <td class="p-3 text-gray-300">${escapeHtml(phoneDisplay)}</td>
-                        <td class="p-3 text-gray-400 text-sm">${time}</td>
-                    `;
-                    tableBody.appendChild(row);
+                    participants.push({ id: doc.id, ...doc.data() });
                 });
                 countDisplay.textContent = participants.length;
+                renderAdminParticipantTable();
             }, (error) => {
                 console.error("Error listening to participants:", error);
             });
@@ -587,17 +588,17 @@
             renderGuestWinnersTable(guestTerm);
         }
 
-        function filterWinners(term) {
-            if (!term) return winners;
-            return winners.filter(w => {
-                const nameMatch = w.name.toLowerCase().includes(term);
-                const phoneMatch = w.phone.includes(term); // Phone stored as clean digits
+        function filterList(list, term) {
+            if (!term) return list;
+            return list.filter(item => {
+                const nameMatch = item.name.toLowerCase().includes(term);
+                const phoneMatch = item.phone.includes(term); // Phone stored as clean digits
                 return nameMatch || phoneMatch;
             });
         }
 
         function renderAdminWinnersTable(searchTerm) {
-            const filteredWinners = filterWinners(searchTerm);
+            const filteredWinners = filterList(winners, searchTerm);
             winnersTableBody.innerHTML = '';
             
             if (winners.length === 0) {
@@ -611,11 +612,7 @@
                 adminNoMatchMsg.classList.add('hidden');
                 
                 filteredWinners.forEach(data => {
-                    // Use winnerRank from data, fallback to index calculation if not strictly reliable client-side order needed
-                    // But we ordered by timestamp in query, so array index matches rank logic if filter is OFF.
-                    // If filter is ON, we should probably show their ORIGINAL rank.
                     const rank = data.winnerRank || '?';
-                    
                     const phoneDisplay = data.phone.length > 3 ? '***' + data.phone.slice(-3) : data.phone;
                     const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
                     const isClaimed = data.claimed || false;
@@ -651,7 +648,7 @@
         }
 
         function renderGuestWinnersTable(searchTerm) {
-            const filteredWinners = filterWinners(searchTerm);
+            const filteredWinners = filterList(winners, searchTerm);
             guestWinnersTableBody.innerHTML = '';
             
             if (winners.length === 0) {
@@ -688,9 +685,36 @@
             }
         }
 
+        function renderAdminParticipantTable() {
+            const searchTerm = adminParticipantSearchInput.value.trim().toLowerCase();
+            const filteredParticipants = filterList(participants, searchTerm);
+            tableBody.innerHTML = '';
+
+            if (filteredParticipants.length === 0 && participants.length > 0) {
+                adminPartNoMatchMsg.classList.remove('hidden');
+            } else {
+                adminPartNoMatchMsg.classList.add('hidden');
+            }
+
+            filteredParticipants.forEach(data => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-white hover:bg-opacity-10 transition-colors';
+                const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
+                const phoneDisplay = data.phone.length > 3 ? '***' + data.phone.slice(-3) : data.phone;
+                
+                row.innerHTML = `
+                    <td class="p-3 font-bold text-white">${escapeHtml(data.name)}</td>
+                    <td class="p-3 text-gray-300">${escapeHtml(phoneDisplay)}</td>
+                    <td class="p-3 text-gray-400 text-sm">${time}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
         // Attach input listeners
         adminSearchInput.addEventListener('input', () => renderAdminWinnersTable(adminSearchInput.value.trim().toLowerCase()));
         guestSearchInput.addEventListener('input', () => renderGuestWinnersTable(guestSearchInput.value.trim().toLowerCase()));
+        adminParticipantSearchInput.addEventListener('input', renderAdminParticipantTable);
 
 
         // --- UI Updates ---
@@ -989,15 +1013,41 @@
         };
 
         window.checkPassword = () => {
-            if (passInput.value === '0514') {
-                modal.classList.add('hidden');
-                views.reg.classList.add('hidden');
-                views.admin.classList.remove('hidden');
-                generateQRCode();
+            const val = passInput.value;
+            if (val === '0514') {
+                currentRole = 'admin';
+                enterAdminPanel();
+            } else if (val === '1015') {
+                currentRole = 'helper';
+                enterAdminPanel();
             } else {
                 alert("密碼錯誤");
             }
         };
+
+        function enterAdminPanel() {
+            modal.classList.add('hidden');
+            views.reg.classList.add('hidden');
+            views.admin.classList.remove('hidden');
+            
+            // Adjust UI based on role
+            if (currentRole === 'helper') {
+                helperBadge.classList.remove('hidden');
+                if(drawControlSection) drawControlSection.classList.add('hidden');
+                if(toggleRegBtn) toggleRegBtn.classList.add('hidden');
+                if(resetDataBtn) resetDataBtn.classList.add('hidden');
+            } else {
+                helperBadge.classList.add('hidden');
+                if(drawControlSection) drawControlSection.classList.remove('hidden');
+                if(toggleRegBtn) toggleRegBtn.classList.remove('hidden');
+                if(resetDataBtn) resetDataBtn.classList.remove('hidden');
+            }
+            
+            generateQRCode();
+            // Force re-render lists to ensure search/UI state is correct
+            renderAdminParticipantTable();
+            renderAllWinnerTables();
+        }
 
         // QR Code Generation
         let qrCodeObj = null;
