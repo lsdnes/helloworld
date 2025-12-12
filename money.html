@@ -57,6 +57,7 @@
             collection, 
             addDoc, 
             setDoc,
+            getDoc,
             onSnapshot, 
             doc, 
             deleteDoc, 
@@ -87,6 +88,7 @@
         // --- 2. 應用程式狀態 (State) ---
         const state = {
             user: null,
+            userName: '', // 新增：儲存從資料庫讀取的姓名
             transactions: [],
             authMode: 'login', // 'login' or 'register'
             filterType: 'month', // 'day', 'month', 'year', 'custom'
@@ -118,19 +120,41 @@
             onAuthStateChanged(auth, (user) => {
                 state.user = user;
                 state.loading = false;
-                renderApp();
+                
                 if (user) {
+                    // 登入後，同時監聽資料與使用者設定檔
                     subscribeToData();
+                    subscribeToUserProfile();
                 } else {
-                    state.transactions = []; // 清空資料
+                    state.transactions = [];
+                    state.userName = '';
+                    unsubscribeAll();
+                }
+                renderApp();
+            });
+        }
+
+        // 監聽使用者個人資料 (為了取得姓名)
+        let unsubscribeUser = null;
+        function subscribeToUserProfile() {
+            if (unsubscribeUser) unsubscribeUser();
+            
+            const userDocRef = doc(db, 'artifacts', appId, 'users', state.user.uid);
+            unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.name) {
+                        state.userName = data.name;
+                        updateWelcomeMessage(); // 更新介面文字
+                    }
                 }
             });
         }
 
-        // 訂閱 Firestore 資料
+        // 監聽記帳資料
         let unsubscribeData = null;
         function subscribeToData() {
-            if (unsubscribeData) unsubscribeData(); // 取消舊訂閱
+            if (unsubscribeData) unsubscribeData();
 
             const q = collection(db, 'artifacts', appId, 'users', state.user.uid, 'transactions');
             
@@ -140,17 +164,22 @@
                     ...doc.data()
                 }));
 
-                // 前端排序：日期(降序) > 時間(降序)
+                // 前端排序
                 data.sort((a, b) => {
                     if (b.date !== a.date) return b.date.localeCompare(a.date);
                     return b.time.localeCompare(a.time);
                 });
 
                 state.transactions = data;
-                renderTransactionList(); // 只重繪列表部分
+                renderTransactionList();
             }, (error) => {
                 console.error("Error fetching transactions:", error);
             });
+        }
+
+        function unsubscribeAll() {
+            if (unsubscribeUser) unsubscribeUser();
+            if (unsubscribeData) unsubscribeData();
         }
 
         // 過濾資料邏輯
@@ -199,11 +228,18 @@
                 els.dashboardView.classList.add('hidden');
                 renderAuth();
             }
-            // 重新初始化圖示
             lucide.createIcons();
         }
 
-        // 渲染：登入/註冊頁面
+        // 輔助函式：只更新歡迎訊息，避免重繪整個 Dashboard
+        function updateWelcomeMessage() {
+            const el = document.getElementById('user-display-name');
+            if (el) {
+                // 優先顯示 DB 讀到的 userName，其次是 Auth 的 displayName，最後是預設值
+                el.textContent = `嗨，${state.userName || state.user.displayName || '使用者'}`;
+            }
+        }
+
         function renderAuth() {
             const isRegister = state.authMode === 'register';
             els.authView.innerHTML = `
@@ -281,7 +317,6 @@
                 </div>
             `;
 
-            // 綁定 Auth 事件
             document.getElementById('toggle-auth-mode').addEventListener('click', () => {
                 state.authMode = state.authMode === 'login' ? 'register' : 'login';
                 renderApp();
@@ -290,18 +325,16 @@
             document.getElementById('auth-form').addEventListener('submit', handleAuthSubmit);
         }
 
-        // 渲染：主控台結構 (不常變動的部分)
         function renderDashboard() {
-            // 只渲染一次框架，如果已經存在就不重繪，避免輸入框失焦
-            if (els.dashboardView.innerHTML.trim() !== '') {
-                // 如果已經有結構，只更新列表部分
-                // 但如果需要更新 Header (例如改名)，這裡可以優化。
-                // 簡單起見，這裡我們假設 Dashboard 結構重繪成本低，
-                // 但 "列表" 獨立出來一個 function 比較好。
-                // 為了保持簡單單檔，每次 state 變更如果不是 user 變更，可以只呼叫 renderTransactionList
-            }
-
-            els.dashboardView.innerHTML = `
+            // 如果已經渲染過，只更新列表，不重繪整個 DOM 以免失去輸入焦點
+            // 這裡直接重置 innerHTML 其實沒關係，因為只有在 filter 或 viewMode 改變時呼叫
+            // 但為了確保輸入框體驗，我們通常會檢查
+            
+            // 這裡我們簡單處理：若已經有結構，就不重新賦值 innerHTML (除非是 init)
+            // 但因為是 Vanilla JS 單檔，最簡單是每次都重繪。
+            // 為了支援姓名更新，我們加上 ID 'user-display-name'
+            
+            const dashboardHTML = `
                 <!-- Header -->
                 <header class="flex flex-col md:flex-row justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                     <div class="flex items-center space-x-4 mb-4 md:mb-0">
@@ -309,8 +342,8 @@
                             <i data-lucide="user" class="w-6 h-6 text-indigo-600"></i>
                         </div>
                         <div>
-                            <h1 class="text-xl font-bold text-gray-800">
-                                嗨，${state.user.displayName || '使用者'}
+                            <h1 id="user-display-name" class="text-xl font-bold text-gray-800">
+                                嗨，${state.userName || state.user.displayName || '使用者'}
                             </h1>
                             <p class="text-sm text-gray-500">歡迎使用您的個人財務系統</p>
                         </div>
@@ -412,20 +445,42 @@
                     </div>
                 </div>
             `;
+            
+            // 為了不干擾輸入，我們只在結構不存在時才寫入，或是透過 state 變更強制重繪
+            // 這裡為了簡單，我們採用替換 innerHTML 的方式，但加上檢查
+            if (els.dashboardView.innerHTML.trim() === '') {
+                els.dashboardView.innerHTML = dashboardHTML;
+                bindDashboardEvents();
+            } else {
+                // 如果已經存在，我們只更新"變動"的部分嗎？
+                // 在此專案中，切換 Filter 會呼叫 setFilterType -> renderDashboard
+                // 這時候還是需要重繪，否則按鈕狀態不會變。
+                // 所以我們這裡一律重繪。
+                // 注意：如果正在打字時重繪，會失去焦點。但打字時不會觸發 renderDashboard (除了 updateUserName)
+                
+                // 但 updateUserName 我們已經用獨立函式處理了，所以這裡可以安心重繪 (切換 view/filter 時)
+                // 唯一例外是：如果 "新增支出" 失敗重繪？不會，handleAddTransaction 只會 alert。
+                
+                // 所以結論：除了 updateWelcomeMessage 之外，其他狀態改變都重繪是安全的。
+                // 我們只在第一次渲染時綁定事件
+                const isFirstRender = els.dashboardView.innerHTML.trim() === '';
+                els.dashboardView.innerHTML = dashboardHTML;
+                bindDashboardEvents();
+            }
 
-            // 綁定 Dashboard 事件
+            renderTransactionList();
+        }
+
+        function bindDashboardEvents() {
             document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
             document.getElementById('add-transaction-form').addEventListener('submit', handleAddTransaction);
             
-            // 綁定自訂日期變更
             const startInput = document.getElementById('custom-start');
             const endInput = document.getElementById('custom-end');
             if(startInput && endInput) {
                 startInput.addEventListener('change', (e) => { state.customStart = e.target.value; renderTransactionList(); });
                 endInput.addEventListener('change', (e) => { state.customEnd = e.target.value; renderTransactionList(); });
             }
-
-            renderTransactionList();
         }
 
         function renderFilterButton(type, label) {
@@ -437,18 +492,16 @@
             `;
         }
 
-        // 渲染：列表內容 (最常變動的部分)
         function renderTransactionList() {
             const container = document.getElementById('transaction-list-container');
             const totalAmountEl = document.getElementById('total-amount');
             const totalLabelEl = document.getElementById('total-label');
             
-            if (!container) return; // 避免 Dashboard 未渲染時錯誤
+            if (!container) return;
 
             const filtered = getFilteredTransactions();
             const total = filtered.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-            // 更新總金額
             if (totalAmountEl) totalAmountEl.textContent = `$ ${total.toLocaleString()}`;
             if (totalLabelEl) {
                 const labels = { day: '今日支出', month: '本月支出', year: '年度支出', custom: '區間總計' };
@@ -490,7 +543,6 @@
                     </div>
                 `;
             } else {
-                // Summary View
                 const summary = {};
                 filtered.forEach(t => {
                     const amt = Number(t.amount);
@@ -542,6 +594,8 @@
 
                     const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
                     await updateProfile(cred.user, { displayName: data.name });
+                    
+                    // 寫入使用者資料到 Firestore
                     await setDoc(doc(db, 'artifacts', appId, 'users', cred.user.uid), {
                         uid: cred.user.uid,
                         name: data.name,
@@ -570,11 +624,9 @@
             const form = e.target;
             const submitBtn = form.querySelector('button[type="submit"]');
             
-            // 取得當前輸入值
             const formData = new FormData(form);
             const amountStr = formData.get('amount');
             
-            // 檢查必填
             if (!formData.get('item') || !amountStr) {
                 alert('請輸入項目與金額');
                 return;
@@ -591,8 +643,6 @@
             submitBtn.innerHTML = '儲存中...';
 
             try {
-                // 使用 addDoc 寫入 Firestore
-                // 路徑: artifacts/{appId}/users/{uid}/transactions
                 const colRef = collection(db, 'artifacts', appId, 'users', state.user.uid, 'transactions');
                 
                 await addDoc(colRef, {
@@ -600,13 +650,11 @@
                     createdAt: serverTimestamp()
                 });
                 
-                // 重置表單 (保留日期時間)
                 form.querySelector('input[name="item"]').value = '';
                 form.querySelector('input[name="amount"]').value = '';
                 
             } catch (err) {
                 console.error("Add Transaction Error:", err);
-                // 顯示詳細錯誤訊息以便除錯
                 alert(`新增失敗: ${err.message}`);
             } finally {
                 submitBtn.disabled = false;
@@ -615,10 +663,9 @@
             }
         }
 
-        // --- 7. 全域函式 (給 onclick 使用) ---
+        // --- 7. 全域函式 ---
         window.setFilterType = (type) => {
             state.filterType = type;
-            // 更新按鈕樣式 (重新渲染 Dashboard 比較簡單，因為按鈕狀態改變)
             renderDashboard();
         };
 
