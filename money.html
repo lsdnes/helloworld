@@ -1,456 +1,707 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>個人財務管理系統</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
-    <style>
-        body {
-            background-color: #1a202c; /* 深色背景，類似你的截圖 */
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+import React, { useState, useEffect, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged,
+  updateProfile,
+  signInWithCustomToken,
+  signInAnonymously
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  addDoc,
+  setDoc, // 新增：用於指定 ID 寫入文件 (註冊時用)
+  onSnapshot, 
+  doc, 
+  deleteDoc, 
+  query, 
+  serverTimestamp 
+} from 'firebase/firestore';
+import { 
+  Wallet, 
+  User, 
+  Lock, 
+  Mail, 
+  LogOut, 
+  PlusCircle, 
+  Calendar, 
+  Clock, 
+  DollarSign, 
+  Tag,
+  Trash2,
+  PieChart,
+  List,
+  Filter,
+  CheckCircle,
+  AlertCircle
+} from 'lucide-react';
+
+// --- Firebase 初始化 ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// --- 元件：財務管理系統主程式 ---
+export default function FinanceApp() {
+  const [user, setUser] = useState(null);
+  const [authView, setAuthView] = useState('login'); // 'login' or 'register'
+  const [loading, setLoading] = useState(true);
+
+  // 初始化 Auth
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        setLoading(false);
+      }
+    };
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 text-gray-500">
+        <div className="animate-spin mr-2"><div className="h-6 w-6 border-4 border-blue-500 border-t-transparent rounded-full"></div></div>
+        載入系統中...
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
+      {user ? (
+        <Dashboard user={user} />
+      ) : (
+        <AuthPage view={authView} setView={setAuthView} />
+      )}
+    </div>
+  );
+}
+
+// --- 元件：認證頁面 (登入/註冊) ---
+function AuthPage({ view, setView }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const isRegister = view === 'register';
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      if (isRegister) {
+        // --- 註冊流程 ---
+        if (password !== confirmPassword) {
+          throw new Error("兩次輸入的密碼不一致");
         }
-        .auth-card {
-            background: white;
-            border-radius: 15px;
-            padding: 2rem;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            max-width: 400px;
-            width: 100%;
-            margin: 50px auto;
-        }
-        .auth-icon {
-            background-color: #e2e8f0;
-            color: #4299e1;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            margin: 0 auto 20px;
-        }
-        .form-control {
-            border-radius: 8px;
-            padding: 10px 15px;
-        }
-        .btn-primary {
-            background-color: #10b981; /* 綠色按鈕 */
-            border: none;
-            border-radius: 8px;
-            padding: 10px;
-            font-weight: bold;
-            width: 100%;
-        }
-        .btn-primary:hover {
-            background-color: #059669;
-        }
-        .toggle-link {
-            text-align: center;
-            margin-top: 15px;
-            color: #718096;
-            cursor: pointer;
-        }
-        .toggle-link span {
-            color: #3182ce;
+        if (!name.trim()) {
+          throw new Error("請輸入您的姓名");
         }
         
-        /* Dashboard 樣式 */
-        #dashboard-section {
-            display: none;
-            padding: 20px;
-        }
-        .dashboard-card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .summary-box {
-            background: #ebf8ff;
-            border-left: 5px solid #4299e1;
-            padding: 15px;
-            border-radius: 4px;
-        }
-        .hidden { display: none; }
-    </style>
-</head>
-<body>
+        // 1. 在 Firebase Auth 建立帳號
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const newUser = userCredential.user;
 
-    <div id="register-section" class="container">
-        <div class="auth-card">
-            <div class="auth-icon"><i class="fas fa-wallet"></i></div>
-            <h3 class="text-center mb-4">註冊新帳號</h3>
-            <form id="register-form">
-                <div class="mb-3">
-                    <label class="form-label">姓名 (Name)</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-user"></i></span>
-                        <input type="text" id="reg-name" class="form-control" placeholder="您的姓名" required>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">帳號 (Email)</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="far fa-envelope"></i></span>
-                        <input type="email" id="reg-email" class="form-control" placeholder="name@example.com" required>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">密碼</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-lock"></i></span>
-                        <input type="password" id="reg-password" class="form-control" placeholder="********" required>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">確認密碼</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-lock"></i></span>
-                        <input type="password" id="reg-confirm-password" class="form-control" placeholder="再次輸入密碼" required>
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-primary">立即註冊</button>
-            </form>
-            <div class="toggle-link" onclick="showLogin()">
-                已經有帳號了嗎？ <span>直接登入</span>
-            </div>
+        // 2. 更新 Auth 個人資料 (顯示名稱)
+        await updateProfile(newUser, {
+          displayName: name
+        });
+
+        // 3. 將註冊資訊寫入 Firestore (users 集合)
+        // 路徑: artifacts/{appId}/users/{uid}
+        await setDoc(doc(db, 'artifacts', appId, 'users', newUser.uid), {
+          uid: newUser.uid,
+          name: name,
+          email: email,
+          createdAt: serverTimestamp()
+        });
+
+      } else {
+        // --- 登入流程 ---
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err) {
+      console.error(err);
+      let msg = "發生錯誤，請稍後再試";
+      if (err.message.includes("password")) msg = "密碼錯誤或不一致";
+      if (err.message.includes("email")) msg = "Email 格式錯誤或已被使用";
+      if (err.message.includes("credential")) msg = "帳號或密碼錯誤";
+      if (err.message.includes("兩次輸入")) msg = err.message;
+      if (err.message.includes("姓名")) msg = err.message;
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
+        
+        <div className="flex flex-col items-center mb-8">
+          <div className="bg-blue-100 p-4 rounded-full mb-4">
+            <Wallet className="w-8 h-8 text-blue-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800">
+            {isRegister ? '註冊新帳號' : '登入財務系統'}
+          </h2>
+          <p className="text-gray-500 text-sm mt-1">
+            {isRegister ? '建立您的個人財務管理檔案' : '歡迎回來，請輸入您的帳號資訊'}
+          </p>
         </div>
-    </div>
 
-    <div id="login-section" class="container hidden">
-        <div class="auth-card">
-            <div class="auth-icon"><i class="fas fa-sign-in-alt"></i></div>
-            <h3 class="text-center mb-4">登入系統</h3>
-            <form id="login-form">
-                <div class="mb-3">
-                    <label class="form-label">帳號 (Email)</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="far fa-envelope"></i></span>
-                        <input type="email" id="login-email" class="form-control" placeholder="name@example.com" required>
-                    </div>
+        {error && (
+          <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg flex items-center">
+            <AlertCircle className="w-4 h-4 mr-2" />
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* 姓名欄位 (僅註冊顯示) */}
+          {isRegister && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">姓名</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <User className="h-5 w-5 text-gray-400" />
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">密碼</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-lock"></i></span>
-                        <input type="password" id="login-password" class="form-control" placeholder="********" required>
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-primary">登入</button>
-            </form>
-            <div class="toggle-link" onclick="showRegister()">
-                還沒有帳號？ <span>註冊新帳號</span>
+                <input
+                  type="text"
+                  required
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="王小明"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
             </div>
+          )}
+
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">帳號 (Email)</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Mail className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="email"
+                required
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* 密碼 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">密碼</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Lock className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="password"
+                required
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* 確認密碼 (僅註冊顯示) */}
+          {isRegister && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">確認密碼</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="password"
+                  required
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="再次輸入密碼"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white ${
+              loading ? 'bg-gray-400' : 'bg-emerald-600 hover:bg-emerald-700'
+            } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors`}
+          >
+            {loading ? '處理中...' : (isRegister ? '立即註冊' : '登入系統')}
+          </button>
+        </form>
+
+        <div className="mt-6 flex items-center justify-center space-x-2 text-sm">
+          <span className="text-gray-500">
+            {isRegister ? '已經有帳號了嗎？' : '還沒有帳號嗎？'}
+          </span>
+          <button
+            onClick={() => {
+              setView(isRegister ? 'login' : 'register');
+              setError('');
+              setName('');
+              setEmail('');
+              setPassword('');
+              setConfirmPassword('');
+            }}
+            className="font-medium text-blue-600 hover:text-blue-500"
+          >
+            {isRegister ? '直接登入' : '註冊新帳號'}
+          </button>
         </div>
+      </div>
     </div>
+  );
+}
 
-    <div id="dashboard-section" class="container-fluid">
-        <nav class="navbar navbar-light bg-light rounded mb-3 px-3">
-            <span class="navbar-brand mb-0 h1"><i class="fas fa-chart-line"></i> 財務管理系統</span>
-            <div class="d-flex align-items-center">
-                <span id="user-display-name" class="me-3 fw-bold"></span>
-                <button onclick="logout()" class="btn btn-outline-danger btn-sm">登出</button>
-            </div>
-        </nav>
+// --- 元件：主控台 (Dashboard) ---
+function Dashboard({ user }) {
+  const [transactions, setTransactions] = useState([]);
+  const [loadingData, setLoadingData] = useState(true);
+  
+  // 篩選與顯示狀態
+  const [filterType, setFilterType] = useState('month'); // day, month, year, custom
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [viewMode, setViewMode] = useState('list'); // list, summary
 
-        <div class="row">
-            <div class="col-md-4">
-                <div class="dashboard-card">
-                    <h4><i class="fas fa-plus-circle"></i> 新增支出/收入</h4>
-                    <hr>
-                    <form id="add-record-form">
-                        <div class="mb-2">
-                            <label>日期</label>
-                            <input type="date" id="record-date" class="form-control" required>
-                        </div>
-                        <div class="mb-2">
-                            <label>時間</label>
-                            <input type="time" id="record-time" class="form-control" required>
-                        </div>
-                        <div class="mb-2">
-                            <label>項目說明</label>
-                            <input type="text" id="record-item" class="form-control" placeholder="例如：午餐" required>
-                        </div>
-                        <div class="mb-3">
-                            <label>金額 (支出為負，收入為正)</label>
-                            <input type="number" id="record-amount" class="form-control" placeholder="例如：-100" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary">儲存紀錄</button>
-                    </form>
-                </div>
-            </div>
+  // 取得資料
+  useEffect(() => {
+    if (!user) return;
 
-            <div class="col-md-8">
-                <div class="dashboard-card">
-                    <h4><i class="fas fa-search"></i> 查詢與統計</h4>
-                    <div class="row g-2 align-items-end mb-3">
-                        <div class="col-md-3">
-                            <label>開始日期</label>
-                            <input type="date" id="query-start" class="form-control">
-                        </div>
-                        <div class="col-md-3">
-                            <label>結束日期</label>
-                            <input type="date" id="query-end" class="form-control">
-                        </div>
-                        <div class="col-md-3">
-                            <label>顯示模式</label>
-                            <select id="view-mode" class="form-select">
-                                <option value="detail">顯示明細 & 總和</option>
-                                <option value="summary">只顯示總金額</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <button onclick="queryRecords()" class="btn btn-secondary w-100">查詢</button>
-                        </div>
-                    </div>
-                    
-                    <div class="summary-box mb-3">
-                        <h5>區間總金額: <span id="total-amount" class="fw-bold text-dark">$0</span></h5>
-                    </div>
+    // 從 Firestore 取得記帳資料
+    // 路徑: artifacts/{appId}/users/{uid}/transactions
+    const q = collection(db, 'artifacts', appId, 'users', user.uid, 'transactions');
 
-                    <div id="list-container" class="table-responsive">
-                        <table class="table table-striped table-hover">
-                            <thead>
-                                <tr>
-                                    <th>日期</th>
-                                    <th>時間</th>
-                                    <th>項目</th>
-                                    <th class="text-end">金額</th>
-                                </tr>
-                            </thead>
-                            <tbody id="records-tbody">
-                                </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // 前端排序：日期(降序) > 時間(降序)
+      data.sort((a, b) => {
+        if (b.date !== a.date) {
+          return b.date.localeCompare(a.date);
+        }
+        return b.time.localeCompare(a.time);
+      });
+
+      setTransactions(data);
+      setLoadingData(false);
+    }, (error) => {
+      console.error("Error fetching transactions:", error);
+      setLoadingData(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // 新增交易：這段程式碼負責將記帳資料寫入 Firestore
+  const handleAddTransaction = async (formData) => {
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'transactions'), {
+        ...formData,
+        amount: Number(formData.amount),
+        createdAt: serverTimestamp() // 加入伺服器時間戳記
+      });
+      return true;
+    } catch (e) {
+      console.error("Error adding doc: ", e);
+      alert("新增失敗");
+      return false;
+    }
+  };
+
+  // 刪除交易
+  const handleDelete = async (id) => {
+    if(!window.confirm("確定要刪除這筆資料嗎？")) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'transactions', id));
+    } catch (e) {
+      console.error("Error deleting: ", e);
+    }
+  };
+
+  // 過濾邏輯
+  const filteredTransactions = useMemo(() => {
+    const now = new Date();
+    
+    return transactions.filter(t => {
+      // 處理日期比對 (避免時區問題，手動解析 YYYY-MM-DD)
+      const [y, m, d] = t.date.split('-').map(Number);
+      const localTDate = new Date(y, m - 1, d);
+
+      if (filterType === 'day') {
+        return localTDate.toDateString() === now.toDateString();
+      } else if (filterType === 'month') {
+        return localTDate.getMonth() === now.getMonth() && localTDate.getFullYear() === now.getFullYear();
+      } else if (filterType === 'year') {
+        return localTDate.getFullYear() === now.getFullYear();
+      } else if (filterType === 'custom') {
+        if (!customStartDate || !customEndDate) return true;
+        const start = new Date(customStartDate);
+        const end = new Date(customEndDate);
+        start.setHours(0,0,0,0);
+        end.setHours(23,59,59,999);
+        return localTDate >= start && localTDate <= end;
+      }
+      return true;
+    });
+  }, [transactions, filterType, customStartDate, customEndDate]);
+
+  // 計算總金額
+  const totalAmount = filteredTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-8">
+      {/* 頂部導覽 */}
+      <header className="flex flex-col md:flex-row justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex items-center space-x-4 mb-4 md:mb-0">
+          <div className="bg-indigo-100 p-3 rounded-full">
+            <User className="w-6 h-6 text-indigo-600" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-gray-800">
+              嗨，{user.displayName || '使用者'}
+            </h1>
+            <p className="text-sm text-gray-500">歡迎使用您的個人財務系統</p>
+          </div>
         </div>
+        <button 
+          onClick={() => signOut(auth)}
+          className="flex items-center px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+        >
+          <LogOut className="w-4 h-4 mr-2" />
+          登出
+        </button>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* 左側：新增表單 */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sticky top-8">
+            <h2 className="text-lg font-bold text-gray-800 mb-6 flex items-center">
+              <PlusCircle className="w-5 h-5 mr-2 text-emerald-500" />
+              記一筆帳
+            </h2>
+            <TransactionForm onAdd={handleAddTransaction} />
+          </div>
+        </div>
+
+        {/* 右側：列表與查詢 */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* 過濾器與總覽卡片 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 space-y-4 md:space-y-0">
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: 'day', label: '今日' },
+                  { id: 'month', label: '本月' },
+                  { id: 'year', label: '今年' },
+                  { id: 'custom', label: '自訂區間' },
+                ].map(type => (
+                  <button
+                    key={type.id}
+                    onClick={() => setFilterType(type.id)}
+                    className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+                      filterType === type.id 
+                        ? 'bg-blue-600 text-white shadow-md' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {type.label}
+                  </button>
+                ))}
+              </div>
+              
+              <div className="flex items-center space-x-2 bg-gray-50 p-1 rounded-lg border border-gray-200">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-2 rounded-md ${viewMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-400'}`}
+                  title="詳細列表"
+                >
+                  <List className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setViewMode('summary')}
+                  className={`p-2 rounded-md ${viewMode === 'summary' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-400'}`}
+                  title="金額統計"
+                >
+                  <PieChart className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* 自訂日期選擇器 */}
+            {filterType === 'custom' && (
+              <div className="flex items-center gap-2 mb-6 bg-blue-50 p-3 rounded-lg animate-fade-in">
+                <input 
+                  type="date" 
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="border rounded px-2 py-1 text-sm"
+                />
+                <span className="text-gray-400">至</span>
+                <input 
+                  type="date" 
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="border rounded px-2 py-1 text-sm"
+                />
+              </div>
+            )}
+
+            {/* 總金額顯示 */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg flex justify-between items-center">
+              <div>
+                <p className="text-blue-100 text-sm mb-1">
+                  {filterType === 'day' ? '今日支出' : 
+                   filterType === 'month' ? '本月支出' : 
+                   filterType === 'year' ? '年度支出' : '區間總計'}
+                </p>
+                <h3 className="text-3xl font-bold">
+                  $ {totalAmount.toLocaleString()}
+                </h3>
+              </div>
+              <div className="bg-white/20 p-3 rounded-full backdrop-blur-sm">
+                <DollarSign className="w-8 h-8 text-white" />
+              </div>
+            </div>
+          </div>
+
+          {/* 資料列表/統計視圖 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+             {loadingData ? (
+               <div className="p-8 text-center text-gray-500">載入資料中...</div>
+             ) : filteredTransactions.length === 0 ? (
+               <div className="p-12 text-center flex flex-col items-center text-gray-400">
+                 <Filter className="w-12 h-12 mb-3 opacity-20" />
+                 <p>此區間沒有支出紀錄</p>
+               </div>
+             ) : (
+               viewMode === 'list' ? (
+                 <div className="divide-y divide-gray-100">
+                   {filteredTransactions.map(t => (
+                     <div key={t.id} className="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between group">
+                       <div className="flex items-start gap-4">
+                         <div className="bg-emerald-100 text-emerald-600 p-2.5 rounded-lg">
+                           <Tag className="w-5 h-5" />
+                         </div>
+                         <div>
+                           <h4 className="font-bold text-gray-800">{t.item}</h4>
+                           <div className="flex items-center text-xs text-gray-500 mt-1 space-x-3">
+                             <span className="flex items-center"><Calendar className="w-3 h-3 mr-1" /> {t.date}</span>
+                             <span className="flex items-center"><Clock className="w-3 h-3 mr-1" /> {t.time}</span>
+                           </div>
+                         </div>
+                       </div>
+                       <div className="flex items-center gap-4">
+                         <span className="font-bold text-gray-800 text-lg">
+                           - {t.amount.toLocaleString()}
+                         </span>
+                         <button 
+                           onClick={() => handleDelete(t.id)}
+                           className="text-gray-300 hover:text-red-500 transition-colors p-2"
+                         >
+                           <Trash2 className="w-4 h-4" />
+                         </button>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               ) : (
+                 <SummaryView transactions={filteredTransactions} />
+               )
+             )}
+          </div>
+
+        </div>
+      </div>
     </div>
+  );
+}
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, collection, addDoc, query, where, getDocs, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+// --- 元件：新增交易表單 ---
+function TransactionForm({ onAdd }) {
+  const getToday = () => new Date().toISOString().split('T')[0];
+  const getNow = () => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
 
-        // ==========================================
-        // CONFIG: 請在此處填入你的 Firebase 設定
-        // ==========================================
-        const firebaseConfig = {
-            apiKey: "AIzaSyDpihYUzRX09riiiP2gTm81KCR1pbVpFis",
-            authDomain: "xmas-1654f.firebaseapp.com",
-            projectId: "xmas-1654f",
-            storageBucket: "xmas-1654f.firebasestorage.app",
-            messagingSenderId: "171667807726",
-            appId: "1:171667807726:web:639da18d4fb507734f02ff",
-            measurementId: "G-3G4WYVDK4H"
-        };
+  const [date, setDate] = useState(getToday());
+  const [time, setTime] = useState(getNow());
+  const [item, setItem] = useState('');
+  const [amount, setAmount] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-        // 初始化 Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!item || !amount) return;
+    setIsSubmitting(true);
 
-        let currentUser = null;
+    const success = await onAdd({ date, time, item, amount });
+    
+    if (success) {
+      setItem('');
+      setAmount('');
+      // Date and Time keep current/user selected
+    }
+    setIsSubmitting(false);
+  };
 
-        // --- UI 切換邏輯 ---
-        window.showLogin = () => {
-            document.getElementById('register-section').classList.add('hidden');
-            document.getElementById('login-section').classList.remove('hidden');
-        };
-        window.showRegister = () => {
-            document.getElementById('login-section').classList.add('hidden');
-            document.getElementById('register-section').classList.remove('hidden');
-        };
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">日期</label>
+        <div className="relative">
+          <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          <input
+            type="date"
+            required
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+      </div>
 
-        // --- 1. 註冊功能 ---
-        document.getElementById('register-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const name = document.getElementById('reg-name').value;
-            const email = document.getElementById('reg-email').value;
-            const password = document.getElementById('reg-password').value;
-            const confirmPwd = document.getElementById('reg-confirm-password').value;
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">時間</label>
+        <div className="relative">
+          <Clock className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          <input
+            type="time"
+            required
+            value={time}
+            onChange={e => setTime(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+      </div>
 
-            if (password !== confirmPwd) {
-                alert("兩次密碼輸入不一致！");
-                return;
-            }
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">項目名稱</label>
+        <div className="relative">
+          <Tag className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            required
+            placeholder="例如：午餐、車費"
+            value={item}
+            onChange={e => setItem(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+      </div>
 
-            try {
-                // 建立 Auth 帳號
-                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                const user = userCredential.user;
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">金額</label>
+        <div className="relative">
+          <DollarSign className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          <input
+            type="number"
+            required
+            min="0"
+            placeholder="0"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+      </div>
 
-                // 將使用者姓名寫入 Firestore (users 集合，使用 uid 當 key)
-                await setDoc(doc(db, "users", user.uid), {
-                    name: name,
-                    email: email,
-                    createdAt: new Date()
-                });
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm transition-all hover:shadow-md flex items-center justify-center"
+      >
+        {isSubmitting ? '儲存中...' : (
+          <>
+            <PlusCircle className="w-4 h-4 mr-2" />
+            新增支出
+          </>
+        )}
+      </button>
+    </form>
+  );
+}
 
-                alert("註冊成功！請登入。");
-                showLogin();
-            } catch (error) {
-                console.error(error);
-                alert("註冊失敗: " + error.message);
-            }
-        });
+// --- 元件：統計視圖 (只顯示金額總和/細項分類) ---
+function SummaryView({ transactions }) {
+  // 依項目名稱合併計算
+  const summary = useMemo(() => {
+    const acc = {};
+    transactions.forEach(t => {
+      if (!acc[t.item]) acc[t.item] = 0;
+      acc[t.item] += Number(t.amount);
+    });
+    return Object.entries(acc)
+      .sort((a, b) => b[1] - a[1]); // 金額從大到小排序
+  }, [transactions]);
 
-        // --- 2. 登入功能 ---
-        document.getElementById('login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('login-email').value;
-            const password = document.getElementById('login-password').value;
-
-            try {
-                await signInWithEmailAndPassword(auth, email, password);
-                // 登入成功後，onAuthStateChanged 會自動處理畫面切換
-            } catch (error) {
-                alert("登入失敗: " + error.message);
-            }
-        });
-
-        // --- 3. 登出功能 ---
-        window.logout = async () => {
-            await signOut(auth);
-            window.location.reload();
-        };
-
-        // --- 監聽登入狀態 ---
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                document.getElementById('login-section').classList.add('hidden');
-                document.getElementById('register-section').classList.add('hidden');
-                document.getElementById('dashboard-section').style.display = 'block';
-                
-                // 設定預設日期 (今天)
-                const today = new Date().toISOString().split('T')[0];
-                document.getElementById('record-date').value = today;
-                
-                // 設定預設時間
-                const now = new Date();
-                const timeString = now.toTimeString().split(' ')[0].substring(0,5);
-                document.getElementById('record-time').value = timeString;
-
-                // 預設查詢當月
-                const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-                document.getElementById('query-start').value = firstDay;
-                document.getElementById('query-end').value = today;
-
-                document.getElementById('user-display-name').innerText = user.email; // 或從 DB 讀取名字
-                queryRecords(); // 載入資料
-            } else {
-                currentUser = null;
-                document.getElementById('dashboard-section').style.display = 'none';
-                document.getElementById('register-section').classList.remove('hidden'); // 預設顯示註冊
-            }
-        });
-
-        // --- 4. 新增記帳紀錄 ---
-        document.getElementById('add-record-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!currentUser) return;
-
-            const date = document.getElementById('record-date').value;
-            const time = document.getElementById('record-time').value;
-            const item = document.getElementById('record-item').value;
-            const amount = parseFloat(document.getElementById('record-amount').value);
-
-            try {
-                // 資料結構：儲存在 users/{uid}/records 子集合中，確保隱私
-                // 組合完整的 Date 物件以便排序
-                const fullDateTime = new Date(`${date}T${time}`);
-
-                await addDoc(collection(db, "users", currentUser.uid, "records"), {
-                    date: date,
-                    time: time,
-                    item: item,
-                    amount: amount,
-                    timestamp: Timestamp.fromDate(fullDateTime) // 用於排序
-                });
-
-                alert("紀錄已新增！");
-                document.getElementById('record-item').value = "";
-                document.getElementById('record-amount').value = "";
-                queryRecords(); // 重新整理列表
-            } catch (error) {
-                console.error("Error adding document: ", error);
-                alert("新增失敗");
-            }
-        });
-
-        // --- 5. 查詢功能 ---
-        window.queryRecords = async () => {
-            if (!currentUser) return;
-
-            const startDate = document.getElementById('query-start').value;
-            const endDate = document.getElementById('query-end').value;
-            const viewMode = document.getElementById('view-mode').value;
-            const tbody = document.getElementById('records-tbody');
-            const totalDisplay = document.getElementById('total-amount');
-
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center">載入中...</td></tr>';
-
-            try {
-                const recordsRef = collection(db, "users", currentUser.uid, "records");
-                
-                // 建立查詢條件：日期區間
-                // 注意：字串比較 "2023-01-01" < "2023-01-02" 是有效的
-                const q = query(
-                    recordsRef, 
-                    where("date", ">=", startDate),
-                    where("date", "<=", endDate),
-                    orderBy("date", "desc"),
-                    orderBy("time", "desc")
-                );
-
-                const querySnapshot = await getDocs(q);
-                
-                let total = 0;
-                let html = "";
-
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    total += data.amount;
-                    
-                    if (viewMode === 'detail') {
-                        const amountClass = data.amount < 0 ? 'text-danger' : 'text-success';
-                        html += `
-                            <tr>
-                                <td>${data.date}</td>
-                                <td>${data.time}</td>
-                                <td>${data.item}</td>
-                                <td class="text-end ${amountClass}">${data.amount}</td>
-                            </tr>
-                        `;
-                    }
-                });
-
-                if (querySnapshot.empty) {
-                    html = '<tr><td colspan="4" class="text-center">此區間無資料</td></tr>';
-                } else if (viewMode === 'summary') {
-                    html = '<tr><td colspan="4" class="text-center text-muted">已隱藏明細，僅顯示總和</td></tr>';
-                }
-
-                tbody.innerHTML = html;
-                totalDisplay.innerText = `$${total}`;
-                totalDisplay.className = total < 0 ? 'fw-bold text-danger' : 'fw-bold text-success';
-
-            } catch (error) {
-                console.error("Query error: ", error);
-                // 常見錯誤是需要建立 Firestore 索引，請查看 Console 的連結
-                if(error.message.includes("requires an index")) {
-                    alert("初次查詢可能需要建立索引，請按 F12 開啟 Console 點擊連結建立。");
-                } else {
-                    alert("查詢失敗，請檢查網路或日期格式。");
-                }
-            }
-        };
-    </script>
-</body>
-</html>
+  return (
+    <div className="p-6">
+      <h3 className="text-gray-800 font-bold mb-4">分類統計</h3>
+      <div className="space-y-4">
+        {summary.map(([name, amount], index) => (
+          <div key={name} className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="w-6 h-6 flex items-center justify-center bg-gray-100 rounded-full text-xs font-bold text-gray-500">
+                {index + 1}
+              </span>
+              <span className="text-gray-700 font-medium">{name}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-24 bg-gray-100 rounded-full overflow-hidden hidden sm:block">
+                <div 
+                  className="h-full bg-blue-500 rounded-full" 
+                  style={{ width: `${Math.min((amount / summary[0][1]) * 100, 100)}%` }}
+                ></div>
+              </div>
+              <span className="font-bold text-gray-800 w-20 text-right">
+                $ {amount.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        ))}
+        {summary.length === 0 && <p>無資料</p>}
+      </div>
+    </div>
+  );
+}
