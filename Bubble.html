@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>經典泡泡龍 (Bubble Bobble Style)</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        canvas {
+            background-color: #000;
+            display: block;
+            border: 4px solid #444;
+            border-radius: 4px;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+        }
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 10;
+        }
+        .hidden {
+            display: none !important;
+        }
+        h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            color: #50e3c2;
+            text-shadow: 4px 4px 0 #2c7a68;
+        }
+        p {
+            font-size: 18px;
+            line-height: 1.6;
+            color: #ccc;
+        }
+        .btn {
+            margin-top: 30px;
+            padding: 12px 30px;
+            font-size: 24px;
+            background: #e91e63;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+            box-shadow: 0 4px 0 #ad1457;
+        }
+        .btn:hover {
+            background: #f06292;
+            transform: translateY(-2px);
+        }
+        .btn:active {
+            transform: translateY(2px);
+            box-shadow: none;
+        }
+        .controls-hint {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #888;
+        }
+        .key {
+            background: #444;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: white;
+            font-family: monospace;
+            border-bottom: 2px solid #222;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div id="ui-overlay">
+        <div>SCORE: <span id="score">0</span></div>
+        <div>LIVES: <span id="lives">3</span></div>
+    </div>
+
+    <div id="start-screen">
+        <h1>BUBBLE HERO</h1>
+        <p>致敬 1986 年經典街機遊戲</p>
+        <p>吐泡泡困住敵人，然後撞破泡泡得分！</p>
+        <button class="btn" onclick="startGame()">START GAME</button>
+        <div class="controls-hint">
+            移動: <span class="key">←</span> <span class="key">→</span> | 
+            跳躍: <span class="key">↑</span> | 
+            吐泡泡: <span class="key">空白鍵</span>
+        </div>
+    </div>
+
+    <div id="game-over-screen" class="hidden">
+        <h1>GAME OVER</h1>
+        <p>最終分數: <span id="final-score">0</span></p>
+        <button class="btn" onclick="resetGame()">TRY AGAIN</button>
+    </div>
+</div>
+
+<script>
+/**
+ * 遊戲常數與設定
+ */
+const CANVAS_WIDTH = 800;
+const CANVAS_HEIGHT = 600;
+const GRAVITY = 0.5;
+const FRICTION = 0.8;
+const PLAYER_SPEED = 5;
+const JUMP_FORCE = -12;
+const BUBBLE_SPEED = 6;
+const BUBBLE_FLOAT_SPEED = -0.5; // 泡泡向上飄的速度
+const BUBBLE_LIFETIME = 300; // 泡泡存活時間 (frames)
+
+// 遊戲狀態
+let canvas, ctx;
+let lastTime = 0;
+let score = 0;
+let lives = 3;
+let gameOver = false;
+let animationId;
+let frameCount = 0;
+
+// 輸入狀態
+const keys = {
+    ArrowLeft: false,
+    ArrowRight: false,
+    ArrowUp: false,
+    Space: false
+};
+
+// 實體列表
+let player;
+let platforms = [];
+let bubbles = [];
+let enemies = [];
+let fruits = [];
+let particles = [];
+
+/**
+ * 基礎實體類別
+ */
+class Entity {
+    constructor(x, y, width, height, color) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.vx = 0;
+        this.vy = 0;
+        this.color = color;
+        this.markedForDeletion = false;
+        this.grounded = false;
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+    }
+
+    // 簡單的 AABB 碰撞檢測
+    collidesWith(other) {
+        return (
+            this.x < other.x + other.width &&
+            this.x + this.width > other.x &&
+            this.y < other.y + other.height &&
+            this.y + this.height > other.y
+        );
+    }
+}
+
+/**
+ * 玩家類別
+ */
+class Player extends Entity {
+    constructor(x, y) {
+        super(x, y, 30, 30, '#50e3c2'); // 青綠色小龍
+        this.facingRight = true;
+        this.shootCooldown = 0;
+        this.isInvincible = false;
+        this.invincibleTimer = 0;
+    }
+
+    update() {
+        // 水平移動
+        if (keys.ArrowRight) {
+            this.vx = PLAYER_SPEED;
+            this.facingRight = true;
+        } else if (keys.ArrowLeft) {
+            this.vx = -PLAYER_SPEED;
+            this.facingRight = false;
+        } else {
+            this.vx *= FRICTION;
+        }
+
+        // 跳躍
+        if (keys.ArrowUp && this.grounded) {
+            this.vy = JUMP_FORCE;
+            this.grounded = false;
+        }
+
+        // 射擊
+        if (keys.Space && this.shootCooldown <= 0) {
+            shootBubble(this);
+            this.shootCooldown = 20; // 冷卻時間
+        }
+        if (this.shootCooldown > 0) this.shootCooldown--;
+
+        // 重力
+        this.vy += GRAVITY;
+
+        // 更新位置
+        super.update();
+
+        // 平台碰撞與邊界處理
+        this.grounded = false;
+        
+        // 簡易螢幕邊界限制 (左右可穿越是經典設定，這裡先做成牆壁防止迷路)
+        if (this.x < 0) this.x = 0;
+        if (this.x + this.width > CANVAS_WIDTH) this.x = CANVAS_WIDTH - this.width;
+
+        // 地板/平台碰撞
+        for (let platform of platforms) {
+            if (this.vy >= 0 && // 只有往下掉的時候才會踩到平台
+                this.x < platform.x + platform.width &&
+                this.x + this.width > platform.x &&
+                this.y + this.height > platform.y &&
+                this.y + this.height < platform.y + platform.height + 10) { // +10 是容錯
+                
+                this.y = platform.y - this.height;
+                this.vy = 0;
+                this.grounded = true;
+            }
+        }
+
+        // 掉出畫面底部回到頂部 (經典機制)
+        if (this.y > CANVAS_HEIGHT) {
+            this.y = 0;
+        }
+
+        // 無敵時間閃爍處理
+        if (this.isInvincible) {
+            this.invincibleTimer--;
+            if (this.invincibleTimer <= 0) {
+                this.isInvincible = false;
+            }
+        }
+    }
+
+    draw(ctx) {
+        if (this.isInvincible && Math.floor(Date.now() / 100) % 2 === 0) return; // 閃爍
+
+        // 簡單繪製恐龍形狀
+        ctx.save();
+        ctx.translate(this.x + this.width/2, this.y + this.height/2);
+        if (!this.facingRight) ctx.scale(-1, 1);
+        
+        // 身體
+        ctx.fillStyle = '#50e3c2';
+        ctx.beginPath();
+        ctx.arc(0, 0, 15, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 尾巴
+        ctx.beginPath();
+        ctx.moveTo(-10, 5);
+        ctx.lineTo(-20, 0);
+        ctx.lineTo(-10, -5);
+        ctx.fill();
+
+        // 眼睛
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(5, -5, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'black';
+        ctx.beginPath();
+        ctx.arc(7, -5, 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 背鰭
+        ctx.fillStyle = '#ffeb3b';
+        ctx.beginPath();
+        ctx.moveTo(-12, -5);
+        ctx.lineTo(-18, -12);
+        ctx.lineTo(-5, -10);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    hit() {
+        if (this.isInvincible) return;
+        
+        lives--;
+        document.getElementById('lives').textContent = lives;
+        
+        // 產生粒子效果
+        createParticles(this.x + this.width/2, this.y + this.height/2, '#50e3c2', 20);
+
+        if (lives <= 0) {
+            gameOver = true;
+            document.getElementById('final-score').textContent = score;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        } else {
+            // 重生
+            this.x = 50;
+            this.y = CANVAS_HEIGHT - 100;
+            this.vx = 0;
+            this.vy = 0;
+            this.isInvincible = true;
+            this.invincibleTimer = 120; // 2秒無敵
+        }
+    }
+}
+
+/**
+ * 敵人類別
+ */
+class Enemy extends Entity {
+    constructor(x, y) {
+        super(x, y, 30, 30, '#ff5252');
+        this.vx = 2; // 初始速度
+        this.directionTimer = 0;
+        this.state = 'active'; // 'active', 'trapped'
+        this.trappedTimer = 0;
+    }
+
+    update() {
+        if (this.state === 'active') {
+            // 簡單 AI: 撞牆反彈，隨機跳躍
+            this.vy += GRAVITY;
+
+            // 水平移動
+            this.x += this.vx;
+
+            // 邊界反彈
+            if (this.x <= 0) {
+                this.x = 0;
+                this.vx *= -1;
+            } else if (this.x + this.width >= CANVAS_WIDTH) {
+                this.x = CANVAS_WIDTH - this.width;
+                this.vx *= -1;
+            }
+
+            // 平台碰撞
+            let onGround = false;
+            for (let platform of platforms) {
+                // 側面碰撞 (簡單處理：反彈)
+                if (this.y + this.height > platform.y + 5 && 
+                    this.y < platform.y + platform.height && 
+                    this.x + this.width > platform.x && 
+                    this.x < platform.x + platform.width) {
+                        this.vx *= -1;
+                }
+
+                // 地面碰撞
+                if (this.vy >= 0 &&
+                    this.x < platform.x + platform.width &&
+                    this.x + this.width > platform.x &&
+                    this.y + this.height > platform.y &&
+                    this.y + this.height < platform.y + platform.height + 10) {
+                    
+                    this.y = platform.y - this.height;
+                    this.vy = 0;
+                    onGround = true;
+                }
+            }
+            
+            // 隨機跳躍
+            if (onGround && Math.random() < 0.01) {
+                this.vy = -8;
+            }
+
+            // 掉出畫面回到頂部
+            if (this.y > CANVAS_HEIGHT) this.y = 0;
+
+            // 碰到玩家
+            if (this.collidesWith(player)) {
+                player.hit();
+            }
+
+        } else if (this.state === 'trapped') {
+            // 被泡泡困住的行為在 Bubble 類別中處理，這裡只需要處理計時
+            // 如果實際上不需要邏輯，可留空
+        }
+    }
+
+    draw(ctx) {
+        if (this.state === 'active') {
+            // 繪製敵人 (發條怪獸風格)
+            ctx.save();
+            ctx.translate(this.x + this.width/2, this.y + this.height/2);
+            if (this.vx < 0) ctx.scale(-1, 1);
+            
+            // 身體
+            ctx.fillStyle = '#ff5252';
+            ctx.fillRect(-15, -15, 30, 30);
+            
+            // 眼睛
+            ctx.fillStyle = 'white';
+            ctx.fillRect(2, -10, 10, 10);
+            ctx.fillStyle = 'black';
+            ctx.fillRect(7, -8, 4, 4);
+
+            // 腳
+            if (Math.floor(Date.now() / 100) % 2 === 0) {
+                ctx.fillStyle = '#d32f2f';
+                ctx.fillRect(-10, 15, 8, 5);
+                ctx.fillRect(5, 15, 8, 5);
+            }
+
+            ctx.restore();
+        } 
+        // Trapped 狀態不繪製，因為它會在泡泡內部
+    }
+}
+
+/**
+ * 泡泡類別
+ */
+class Bubble extends Entity {
+    constructor(x, y, direction) {
+        super(x, y, 32, 32, 'rgba(100, 200, 255, 0.5)');
+        this.vx = direction * BUBBLE_SPEED;
+        this.flyTime = 30; // 水平飛行時間
+        this.lifeTime = BUBBLE_LIFETIME;
+        this.trappedEnemy = null; // 存放被困住的敵人
+    }
+
+    update() {
+        this.lifeTime--;
+
+        if (this.flyTime > 0) {
+            // 發射階段：水平飛行
+            this.flyTime--;
+            this.x += this.vx;
+            // 阻力減速
+            this.vx *= 0.95;
+        } else {
+            // 漂浮階段：慢慢往上
+            this.vy = BUBBLE_FLOAT_SPEED;
+            this.y += this.vy;
+            
+            // 左右輕微擺動
+            this.x += Math.sin(this.lifeTime * 0.1) * 0.5;
+        }
+
+        // 邊界檢查
+        if (this.x < 0) this.x = 0;
+        if (this.x + this.width > CANVAS_WIDTH) this.x = CANVAS_WIDTH - this.width;
+        if (this.y < -50) this.y = CANVAS_HEIGHT; // 循環
+
+        // 泡泡破裂
+        if (this.lifeTime <= 0) {
+            this.pop();
+        }
+
+        // 邏輯分支：空泡泡 vs 包裹敵人的泡泡
+        if (!this.trappedEnemy) {
+            // 1. 檢查是否碰到敵人 (包裹敵人)
+            for (let i = 0; i < enemies.length; i++) {
+                let enemy = enemies[i];
+                if (enemy.state === 'active' && this.collidesWith(enemy)) {
+                    this.trapEnemy(enemy);
+                    break;
+                }
+            }
+        } else {
+            // 2. 如果包裹了敵人，玩家碰到會戳破並得分
+            if (this.collidesWith(player)) {
+                // 玩家戳破泡泡 -> 殺敵 -> 變水果
+                spawnFruit(this.x, this.y);
+                createParticles(this.x + 16, this.y + 16, '#ff5252', 10);
+                addScore(1000); // 殺敵分數
+                this.pop();
+            }
+        }
+        
+        // 玩家可以用頭頂泡泡 (簡單物理互動：碰到泡泡底部會彈一下)
+        // 這裡簡化為：如果玩家在泡泡上方跳躍，泡泡破裂 (如果是空泡泡)
+        if (!this.trappedEnemy && this.collidesWith(player)) {
+            // 為了不讓畫面太亂，玩家碰到空泡泡也會破
+            this.pop();
+        }
+    }
+
+    trapEnemy(enemy) {
+        this.trappedEnemy = enemy;
+        enemy.state = 'trapped';
+        enemy.x = -1000; // 移出畫面
+        this.lifeTime = 600; // 延長泡泡時間讓玩家去戳
+        this.color = 'rgba(255, 100, 100, 0.7)'; // 變紅色
+    }
+
+    pop() {
+        this.markedForDeletion = true;
+        // 如果敵人被困住但泡泡自然破裂（超時），敵人會逃脫並變生氣（這裡簡化為釋放敵人）
+        if (this.trappedEnemy && !this.markedForDeletion) { // 這裡邏輯有點怪，簡化為：破了就沒了，如果是超時破裂，敵人應該重生
+             // 簡單起見，超時破裂敵人就逃跑（變回 active）
+             this.trappedEnemy.state = 'active';
+             this.trappedEnemy.x = this.x;
+             this.trappedEnemy.y = this.y;
+             this.trappedEnemy.isAngry = true; // 預留屬性
+        }
+        createParticles(this.x + 16, this.y + 16, '#aaddff', 5);
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x + 16, this.y + 16);
+        
+        // 畫泡泡
+        ctx.beginPath();
+        ctx.arc(0, 0, 16, 0, Math.PI * 2);
+        ctx.fillStyle = this.trappedEnemy ? 'rgba(255, 150, 150, 0.6)' : 'rgba(100, 220, 255, 0.4)';
+        ctx.fill();
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 高光
+        ctx.beginPath();
+        ctx.arc(-5, -5, 4, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fill();
+
+        // 如果有敵人，畫個小圖示在裡面
+        if (this.trappedEnemy) {
+            ctx.fillStyle = '#a00000';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('x_x', 0, 2);
+            // 旋轉動畫
+            ctx.rotate(Date.now() * 0.005);
+        }
+
+        ctx.restore();
+    }
+}
+
+/**
+ * 水果/分數道具類別
+ */
+class Fruit extends Entity {
+    constructor(x, y) {
+        super(x, y, 20, 20, 'orange');
+        this.vy = -3; // 往上跳一下
+        this.vx = (Math.random() - 0.5) * 4;
+        this.onGround = false;
+    }
+    
+    update() {
+        this.vy += GRAVITY;
+        this.x += this.vx;
+        this.y += this.vy;
+        
+        // 碰到地板停住
+        for (let platform of platforms) {
+             if (this.vy >= 0 &&
+                this.x < platform.x + platform.width &&
+                this.x + this.width > platform.x &&
+                this.y + this.height > platform.y &&
+                this.y + this.height < platform.y + platform.height + 10) {
+                
+                this.y = platform.y - this.height;
+                this.vy = 0;
+                this.vx = 0;
+                this.onGround = true;
+            }
+        }
+
+        if (this.collidesWith(player)) {
+            addScore(500);
+            this.markedForDeletion = true;
+            createParticles(this.x + 10, this.y + 10, 'yellow', 10);
+        }
+    }
+
+    draw(ctx) {
+        ctx.font = '24px Arial';
+        ctx.fillText('🍎', this.x, this.y + 20);
+    }
+}
+
+/**
+ * 粒子效果
+ */
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 6;
+        this.vy = (Math.random() - 0.5) * 6;
+        this.life = 1.0;
+        this.color = color;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= 0.05;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, 4, 4);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+/**
+ * 遊戲主邏輯
+ */
+
+function init() {
+    canvas = document.getElementById('gameCanvas');
+    ctx = canvas.getContext('2d');
+
+    // 監聽鍵盤
+    window.addEventListener('keydown', e => {
+        if (keys.hasOwnProperty(e.code)) keys[e.code] = true;
+        if (e.code === 'Space' && gameOver) resetGame();
+    });
+    window.addEventListener('keyup', e => {
+        if (keys.hasOwnProperty(e.code)) keys[e.code] = false;
+    });
+
+    createLevel();
+    player = new Player(50, CANVAS_HEIGHT - 100);
+    
+    // 初始敵人
+    spawnEnemy();
+    spawnEnemy();
+    spawnEnemy();
+}
+
+function createLevel() {
+    platforms = [];
+    // 地板
+    platforms.push({x: 0, y: CANVAS_HEIGHT - 20, width: CANVAS_WIDTH, height: 20});
+    // 牆壁
+    platforms.push({x: -20, y: 0, width: 20, height: CANVAS_HEIGHT});
+    platforms.push({x: CANVAS_WIDTH, y: 0, width: 20, height: CANVAS_HEIGHT});
+    // 屋頂
+    platforms.push({x: 0, y: -20, width: CANVAS_WIDTH, height: 20});
+
+    // 平台佈局 (L型結構與中間平台)
+    platforms.push({x: 200, y: 450, width: 400, height: 20});
+    
+    platforms.push({x: 100, y: 300, width: 200, height: 20});
+    platforms.push({x: 500, y: 300, width: 200, height: 20});
+
+    platforms.push({x: 300, y: 150, width: 200, height: 20});
+}
+
+function spawnEnemy() {
+    let x = Math.random() * (CANVAS_WIDTH - 60) + 30;
+    let y = Math.random() * (CANVAS_HEIGHT - 200);
+    enemies.push(new Enemy(x, y));
+}
+
+function shootBubble(player) {
+    let direction = player.facingRight ? 1 : -1;
+    let bx = player.x + (player.facingRight ? player.width : -32);
+    let by = player.y;
+    bubbles.push(new Bubble(bx, by, direction));
+}
+
+function spawnFruit(x, y) {
+    fruits.push(new Fruit(x, y));
+}
+
+function createParticles(x, y, color, count) {
+    for(let i=0; i<count; i++) {
+        particles.push(new Particle(x, y, color));
+    }
+}
+
+function addScore(points) {
+    score += points;
+    document.getElementById('score').textContent = score;
+    
+    // 每 5000 分加一隻敵人 (增加難度)
+    if (score % 2000 === 0) {
+        spawnEnemy();
+    }
+}
+
+function gameLoop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const deltaTime = timestamp - lastTime;
+    lastTime = timestamp;
+
+    if (!gameOver) {
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // 繪製背景網格
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i < CANVAS_WIDTH; i+=50) { ctx.moveTo(i, 0); ctx.lineTo(i, CANVAS_HEIGHT); }
+        for (let i = 0; i < CANVAS_HEIGHT; i+=50) { ctx.moveTo(0, i); ctx.lineTo(CANVAS_WIDTH, i); }
+        ctx.stroke();
+
+        // 繪製平台
+        ctx.fillStyle = '#795548';
+        for (let p of platforms) {
+            ctx.fillRect(p.x, p.y, p.width, p.height);
+            // 平台頂部亮條
+            ctx.fillStyle = '#a1887f';
+            ctx.fillRect(p.x, p.y, p.width, 4);
+            ctx.fillStyle = '#795548';
+        }
+
+        // 更新與繪製玩家
+        player.update();
+        player.draw(ctx);
+
+        // 更新與繪製敵人
+        enemies.forEach(e => {
+            e.update();
+            e.draw(ctx);
+        });
+
+        // 更新與繪製泡泡
+        bubbles = bubbles.filter(b => !b.markedForDeletion);
+        bubbles.forEach(b => {
+            b.update();
+            b.draw(ctx);
+        });
+
+        // 更新與繪製水果
+        fruits = fruits.filter(f => !f.markedForDeletion);
+        fruits.forEach(f => {
+            f.update();
+            f.draw(ctx);
+        });
+
+        // 更新與繪製粒子
+        particles = particles.filter(p => p.life > 0);
+        particles.forEach(p => {
+            p.update();
+            p.draw(ctx);
+        });
+
+        // 簡單的敵人重生機制：如果敵人太少，慢慢補
+        if (enemies.filter(e => e.state === 'active').length === 0 && frameCount % 300 === 0) {
+            spawnEnemy();
+            spawnEnemy(); // 下一波
+        }
+        
+        frameCount++;
+    }
+
+    animationId = requestAnimationFrame(gameLoop);
+}
+
+function startGame() {
+    document.getElementById('start-screen').classList.add('hidden');
+    init();
+    gameLoop(0);
+}
+
+function resetGame() {
+    document.getElementById('game-over-screen').classList.add('hidden');
+    score = 0;
+    lives = 3;
+    gameOver = false;
+    document.getElementById('score').textContent = score;
+    document.getElementById('lives').textContent = lives;
+    
+    // 清空實體
+    bubbles = [];
+    enemies = [];
+    fruits = [];
+    particles = [];
+    
+    init();
+}
+
+// 初始載入時不自動開始，等待用戶點擊
+ctx = document.getElementById('gameCanvas').getContext('2d');
+ctx.fillStyle = '#111';
+ctx.fillRect(0,0,800,600);
+
+</script>
+</body>
+</html>
