@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🎄 聖誕歡樂摸彩派對 🎅</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- QRCode.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- 引入外部設定檔 (GitHub Pages 安全性修正) -->
+    <script src="firebase-config.js"></script>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap');
@@ -87,6 +89,11 @@
             box-shadow: 0 0 0 #8b0000;
         }
 
+        .btn-stop {
+            background: linear-gradient(to bottom, #555, #333);
+            border: 2px solid #999;
+        }
+
         .search-input {
             background: rgba(0, 0, 0, 0.3);
             border: 1px solid #fbbf24;
@@ -125,6 +132,22 @@
             50% { filter: blur(2px); transform: translateY(-2px); }
             100% { filter: blur(0px); transform: translateY(0); }
         }
+        
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(251, 191, 36, 0.5);
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(251, 191, 36, 0.8);
+        }
     </style>
 </head>
 <body class="flex flex-col items-center min-h-screen relative pb-10">
@@ -135,23 +158,24 @@
     <div class="snowflake">❅</div><div class="snowflake">❆</div>
 
     <!-- Header -->
-    <header class="w-full p-4 text-center z-10 relative mt-4">
-        <h1 class="text-4xl md:text-6xl font-bold gold-text mb-2 drop-shadow-lg">
+    <header class="w-full p-4 md:p-8 text-center z-10 relative mt-2 md:mt-4">
+        <h1 class="text-3xl md:text-5xl lg:text-6xl font-bold gold-text mb-2 drop-shadow-lg leading-tight">
             <i class="fa-solid fa-tree text-green-400"></i> 聖誕歡樂摸彩 <i class="fa-solid fa-gifts text-red-500"></i>
         </h1>
-        <p class="text-lg text-gray-200">祝大家聖誕快樂 Merry Christmas</p>
+        <p class="text-base md:text-xl text-gray-200">祝大家聖誕快樂 Merry Christmas</p>
     </header>
 
     <!-- Main Content Area -->
-    <main class="w-full max-w-md md:max-w-2xl p-4 z-10 relative flex-grow">
+    <!-- RWD: max-w-md on mobile (centered card), max-w-6xl on desktop (wide dashboard) -->
+    <main class="w-full max-w-md md:max-w-6xl p-4 z-10 relative flex-grow transition-all duration-300">
         
-        <!-- Registration View (Default) -->
+        <!-- Registration View (Default - Mobile Optimized) -->
         <div id="registrationView" class="w-full max-w-md mx-auto transition-all duration-300">
             
             <!-- Registration Form Area -->
             <div id="regFormContainer" class="glass-panel rounded-2xl p-6 md:p-8 mb-6">
                 <div class="text-center mb-6">
-                    <i class="fa-solid fa-ticket text-5xl text-yellow-400 mb-4"></i>
+                    <i class="fa-solid fa-ticket text-4xl md:text-5xl text-yellow-400 mb-4"></i>
                     <h2 class="text-2xl font-bold mb-2">登記參加抽獎</h2>
                     <p class="text-sm opacity-80">填寫資料，將有機會獲得大獎！</p>
                     
@@ -165,21 +189,21 @@
                     <div>
                         <label class="block text-sm font-bold mb-1 ml-1">您的姓名 / Name</label>
                         <input type="text" id="guestName" required placeholder="請輸入姓名" 
-                            class="input-christmas w-full p-3 rounded-lg outline-none focus:ring-4 focus:ring-yellow-400">
+                            class="input-christmas w-full p-3 rounded-lg outline-none focus:ring-4 focus:ring-yellow-400 text-lg">
                     </div>
                     <div>
                         <label class="block text-sm font-bold mb-1 ml-1">手機號碼 / Phone</label>
                         <input type="tel" id="guestPhone" required placeholder="0912-345-678" 
                             oninput="this.value = this.value.replace(/[^0-9-]/g, '')"
-                            class="input-christmas w-full p-3 rounded-lg outline-none focus:ring-4 focus:ring-yellow-400">
+                            class="input-christmas w-full p-3 rounded-lg outline-none focus:ring-4 focus:ring-yellow-400 text-lg">
                         <p class="text-xs text-gray-300 mt-1 ml-1">* 只可輸入數字與減號 (-)</p>
                     </div>
-                    <button type="submit" class="btn-christmas w-full py-4 rounded-lg text-xl font-bold mt-4 text-white">
+                    <button type="submit" class="btn-christmas w-full py-4 rounded-lg text-xl font-bold mt-4 text-white hover:scale-[1.02] active:scale-95 transition-transform">
                         <i class="fa-solid fa-paper-plane mr-2"></i> 確認送出
                     </button>
                 </form>
 
-                <div id="successMessage" class="hidden text-center mt-6 p-4 bg-green-800 bg-opacity-80 rounded-lg border-2 border-green-400">
+                <div id="successMessage" class="hidden text-center mt-6 p-4 bg-green-800 bg-opacity-80 rounded-lg border-2 border-green-400 animate-pulse">
                     <i class="fa-solid fa-check-circle text-4xl text-green-300 mb-2"></i>
                     <h3 class="text-xl font-bold">登記成功！</h3>
                     <p>請留意晚會抽獎環節</p>
@@ -209,13 +233,13 @@
                 
                 <!-- Guest Search Bar -->
                 <div class="mb-4 relative">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-yellow-400"></i>
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-yellow-400"></i>
                     <input type="text" id="guestSearchInput" placeholder="搜尋姓名或電話末三碼..." class="search-input">
                 </div>
 
-                <div class="overflow-y-auto max-h-60 custom-scrollbar">
+                <div class="overflow-y-auto max-h-[50vh] md:max-h-60 custom-scrollbar">
                     <table class="w-full text-left">
-                        <thead class="bg-black bg-opacity-30 text-yellow-400 text-sm">
+                        <thead class="bg-black bg-opacity-30 text-yellow-400 text-sm sticky top-0 backdrop-blur-sm">
                             <tr>
                                 <th class="p-2">序號</th>
                                 <th class="p-2">姓名</th>
@@ -237,113 +261,123 @@
             </div>
         </div>
 
-        <!-- Admin Dashboard View (Hidden by default) -->
+        <!-- Admin Dashboard View (Hidden by default - Desktop Optimized) -->
         <div id="adminView" class="hidden w-full transition-all duration-300">
+            <!-- Top Control Bar -->
             <div class="glass-panel rounded-2xl p-6 md:p-8 mb-6">
-                <div class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-gray-500 pb-4">
-                    <div>
-                        <h2 class="text-3xl font-bold gold-text">後台管理中心 <span id="helperBadge" class="hidden text-sm bg-blue-600 text-white px-2 py-1 rounded ml-2 align-middle">小幫手模式</span></h2>
-                        <div class="flex gap-4 mt-2">
-                            <p class="text-sm">參加人數: <span id="participantCount" class="text-xl font-bold text-white">0</span></p>
-                            <p class="text-sm">中獎人數: <span id="winnerCount" class="text-xl font-bold text-green-400">0</span></p>
+                <div class="flex flex-col lg:flex-row justify-between items-center mb-6 border-b border-gray-500 pb-4 gap-4">
+                    <div class="text-center lg:text-left">
+                        <h2 class="text-2xl md:text-3xl font-bold gold-text">後台管理中心 <span id="helperBadge" class="hidden text-xs md:text-sm bg-blue-600 text-white px-2 py-1 rounded ml-2 align-middle">小幫手模式</span></h2>
+                        <div class="flex flex-wrap justify-center lg:justify-start gap-4 mt-2">
+                            <p class="text-sm md:text-base">參加人數: <span id="participantCount" class="text-xl font-bold text-white">0</span></p>
+                            <p class="text-sm md:text-base">中獎人數: <span id="winnerCount" class="text-xl font-bold text-green-400">0</span></p>
                         </div>
                     </div>
-                    <div class="mt-4 md:mt-0 flex flex-wrap gap-2 justify-center">
+                    <div class="flex flex-wrap gap-2 justify-center">
                         <!-- Toggle Registration Button -->
-                        <button id="toggleRegBtn" onclick="toggleRegistration()" class="px-4 py-2 rounded text-sm font-bold border border-green-500 bg-green-700 hover:bg-green-600 transition-colors shadow-lg">
+                        <button id="toggleRegBtn" onclick="toggleRegistration()" class="px-3 py-2 md:px-4 rounded text-sm font-bold border border-green-500 bg-green-700 hover:bg-green-600 transition-colors shadow-lg">
                             <i class="fa-solid fa-door-open"></i> 開放報名中
                         </button>
                         
-                        <button id="resetDataBtn" onclick="resetData()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm border border-gray-500">
+                        <button id="resetDataBtn" onclick="resetData()" class="bg-gray-700 hover:bg-gray-600 px-3 py-2 md:px-4 rounded text-sm border border-gray-500 transition-colors">
                             <i class="fa-solid fa-trash-can"></i> 重置活動
                         </button>
-                        <button onclick="exitAdmin()" class="bg-red-800 hover:bg-red-700 px-4 py-2 rounded text-sm border border-red-500">
-                            <i class="fa-solid fa-sign-out-alt"></i> 離開後台
+                        <button onclick="exitAdmin()" class="bg-red-800 hover:bg-red-700 px-3 py-2 md:px-4 rounded text-sm border border-red-500 transition-colors">
+                            <i class="fa-solid fa-sign-out-alt"></i> 離開
                         </button>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- QR Code Section -->
-                    <div class="bg-white bg-opacity-90 p-4 rounded-xl text-center text-gray-800 flex flex-col items-center justify-center">
-                        <h3 class="font-bold text-lg mb-2 text-[#1a472a]">掃描加入抽獎</h3>
-                        <div id="qrcode" class="border-4 border-[#c41e3a] p-2 bg-white rounded-lg"></div>
-                        <p class="text-xs mt-2 text-gray-600">請來賓掃描此 QR Code</p>
-                    </div>
-
-                    <!-- Draw Control Section -->
-                    <div id="drawControlSection" class="flex flex-col justify-center items-center text-center">
-                        <div id="drawDisplay" class="w-full h-40 bg-black bg-opacity-50 rounded-xl border-4 border-yellow-400 flex items-center justify-center mb-4 overflow-hidden relative p-4">
-                            <div id="scrollingName" class="text-4xl font-bold text-white">準備抽獎</div>
-                            <div id="fireworks" class="absolute inset-0 pointer-events-none"></div>
+                <!-- Admin Grid: 2 Columns on Desktop, 1 on Mobile -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                    <!-- Left Column: Controls (Draw & QR) -->
+                    <div class="space-y-6">
+                        <!-- Draw Control Section -->
+                        <div id="drawControlSection" class="flex flex-col justify-center items-center text-center bg-black bg-opacity-20 p-4 rounded-xl border border-gray-600">
+                            <h3 class="text-xl font-bold mb-4 text-yellow-400"><i class="fa-solid fa-star"></i> 抽獎區</h3>
+                            <div id="drawDisplay" class="w-full h-32 md:h-48 bg-black bg-opacity-50 rounded-xl border-4 border-yellow-400 flex items-center justify-center mb-4 overflow-hidden relative p-4 transition-all">
+                                <div id="scrollingName" class="text-3xl md:text-5xl font-bold text-white">準備抽獎</div>
+                                <div id="fireworks" class="absolute inset-0 pointer-events-none"></div>
+                            </div>
+                            
+                            <button id="drawBtn" class="btn-christmas w-full py-3 md:py-4 rounded-lg text-xl md:text-2xl font-bold text-white relative overflow-hidden group hover:scale-[1.01] transition-transform">
+                                <span class="relative z-10"><i class="fa-solid fa-play"></i> 開始抽獎</span>
+                                <div class="absolute top-0 left-0 w-full h-full bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                            </button>
                         </div>
-                        
-                        <button id="drawBtn" class="btn-christmas w-full py-4 rounded-lg text-2xl font-bold text-white relative overflow-hidden group">
-                            <span class="relative z-10"><i class="fa-solid fa-star"></i> 開始抽獎</span>
-                            <div class="absolute top-0 left-0 w-full h-full bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
-                        </button>
+
+                        <!-- QR Code Section -->
+                        <div class="bg-white bg-opacity-90 p-4 rounded-xl text-center text-gray-800 flex flex-col items-center justify-center">
+                            <h3 class="font-bold text-lg mb-2 text-[#1a472a]">掃描加入抽獎</h3>
+                            <div id="qrcode" class="border-4 border-[#c41e3a] p-2 bg-white rounded-lg"></div>
+                            <p class="text-xs mt-2 text-gray-600">請來賓掃描此 QR Code</p>
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- Winners List Section (Admin) -->
-            <div class="glass-panel rounded-2xl p-6 mb-6 border-2 border-yellow-500 bg-yellow-900 bg-opacity-30">
-                <h3 class="text-xl font-bold mb-4 border-b border-yellow-500 pb-2 flex items-center">
-                    <i class="fa-solid fa-trophy text-yellow-400 mr-2"></i> 榮譽榜 (中獎名單)
-                </h3>
+                    <!-- Right Column: Lists -->
+                    <div class="space-y-6">
+                        <!-- Winners List Section (Admin) -->
+                        <div class="glass-panel rounded-2xl p-4 md:p-6 border-2 border-yellow-500 bg-yellow-900 bg-opacity-30 h-[500px] flex flex-col">
+                            <h3 class="text-xl font-bold mb-4 border-b border-yellow-500 pb-2 flex items-center flex-shrink-0">
+                                <i class="fa-solid fa-trophy text-yellow-400 mr-2"></i> 榮譽榜 (中獎名單)
+                            </h3>
 
-                <!-- Admin Search Bar -->
-                <div class="mb-4 relative">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-yellow-400"></i>
-                    <input type="text" id="adminSearchInput" placeholder="搜尋中獎者姓名或電話末三碼..." class="search-input">
-                </div>
+                            <!-- Admin Search Bar -->
+                            <div class="mb-4 relative flex-shrink-0">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-yellow-400"></i>
+                                <input type="text" id="adminSearchInput" placeholder="搜尋中獎者姓名或電話末三碼..." class="search-input">
+                            </div>
 
-                <div class="overflow-y-auto max-h-48 custom-scrollbar">
-                    <table class="w-full text-left">
-                        <thead class="bg-black bg-opacity-30 text-yellow-400">
-                            <tr>
-                                <th class="p-3">序號</th>
-                                <th class="p-3">姓名</th>
-                                <th class="p-3">電話 (末三碼)</th>
-                                <th class="p-3">中獎時間</th>
-                                <th class="p-3">狀態</th>
-                            </tr>
-                        </thead>
-                        <tbody id="winnersTableBody" class="divide-y divide-yellow-800 text-yellow-100">
-                            <!-- Winners will be injected here -->
-                        </tbody>
-                    </table>
-                    <p id="noWinnersMsg" class="text-center text-gray-400 py-4 text-sm italic hidden">目前尚未產生中獎者</p>
-                    <p id="adminNoMatchMsg" class="text-center text-gray-400 py-4 text-sm italic hidden">查無符合資料</p>
-                </div>
-            </div>
+                            <div class="overflow-y-auto flex-grow custom-scrollbar">
+                                <table class="w-full text-left">
+                                    <thead class="bg-black bg-opacity-30 text-yellow-400 sticky top-0 backdrop-blur-sm z-10">
+                                        <tr>
+                                            <th class="p-3 text-sm md:text-base">序號</th>
+                                            <th class="p-3 text-sm md:text-base">姓名</th>
+                                            <th class="p-3 text-sm md:text-base hidden md:table-cell">電話</th>
+                                            <th class="p-3 text-sm md:text-base hidden md:table-cell">時間</th>
+                                            <th class="p-3 text-sm md:text-base">領獎</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="winnersTableBody" class="divide-y divide-yellow-800 text-yellow-100">
+                                        <!-- Winners will be injected here -->
+                                    </tbody>
+                                </table>
+                                <p id="noWinnersMsg" class="text-center text-gray-400 py-10 text-sm italic hidden">目前尚未產生中獎者</p>
+                                <p id="adminNoMatchMsg" class="text-center text-gray-400 py-10 text-sm italic hidden">查無符合資料</p>
+                            </div>
+                        </div>
 
-            <!-- Participant List -->
-            <div class="glass-panel rounded-2xl p-6 opacity-80">
-                <h3 class="text-xl font-bold mb-4 border-b border-gray-500 pb-2">
-                    <i class="fa-solid fa-users"></i> 參加者名單
-                </h3>
-                
-                <!-- Admin Participant Search Bar -->
-                <div class="mb-4 relative">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400"></i>
-                    <input type="text" id="adminParticipantSearchInput" placeholder="搜尋參加者姓名或電話..." class="search-input border-gray-500 focus:border-white">
-                </div>
+                        <!-- Participant List -->
+                        <div class="glass-panel rounded-2xl p-4 md:p-6 opacity-80 h-[300px] flex flex-col">
+                            <h3 class="text-xl font-bold mb-4 border-b border-gray-500 pb-2 flex-shrink-0">
+                                <i class="fa-solid fa-users"></i> 參加者名單
+                            </h3>
+                            
+                            <!-- Admin Participant Search Bar -->
+                            <div class="mb-4 relative flex-shrink-0">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-gray-400"></i>
+                                <input type="text" id="adminParticipantSearchInput" placeholder="搜尋參加者姓名或電話..." class="search-input border-gray-500 focus:border-white">
+                            </div>
 
-                <div class="overflow-y-auto max-h-40 custom-scrollbar">
-                    <table class="w-full text-left">
-                        <thead class="bg-black bg-opacity-30 text-gray-300">
-                            <tr>
-                                <th class="p-3">姓名</th>
-                                <th class="p-3">電話 (末三碼)</th>
-                                <th class="p-3">登記時間</th>
-                            </tr>
-                        </thead>
-                        <tbody id="participantTableBody" class="divide-y divide-gray-600">
-                            <!-- Rows will be injected here -->
-                        </tbody>
-                    </table>
-                    <p id="adminPartNoMatchMsg" class="text-center text-gray-400 py-4 text-sm italic hidden">查無符合資料</p>
+                            <div class="overflow-y-auto flex-grow custom-scrollbar">
+                                <table class="w-full text-left">
+                                    <thead class="bg-black bg-opacity-30 text-gray-300 sticky top-0 backdrop-blur-sm z-10">
+                                        <tr>
+                                            <th class="p-3 text-sm md:text-base">姓名</th>
+                                            <th class="p-3 text-sm md:text-base">電話 (末三碼)</th>
+                                            <th class="p-3 text-sm md:text-base hidden md:table-cell">登記時間</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="participantTableBody" class="divide-y divide-gray-600">
+                                        <!-- Rows will be injected here -->
+                                    </tbody>
+                                </table>
+                                <p id="adminPartNoMatchMsg" class="text-center text-gray-400 py-10 text-sm italic hidden">查無符合資料</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -353,19 +387,19 @@
     <!-- Footer / Admin Toggle -->
     <footer class="w-full text-center p-4 z-10 text-sm text-gray-400">
         <p class="mb-2">Happy Holidays & Good Luck!</p>
-        <button id="adminToggleBtn" class="opacity-30 hover:opacity-100 transition-opacity text-xs border border-gray-600 px-2 py-1 rounded">
+        <button id="adminToggleBtn" class="opacity-30 hover:opacity-100 transition-opacity text-xs border border-gray-600 px-3 py-1 rounded">
             🎅 主持人後台
         </button>
     </footer>
 
     <!-- Admin Password Modal -->
-    <div id="passwordModal" class="fixed inset-0 bg-black bg-opacity-80 z-50 hidden flex items-center justify-center">
-        <div class="bg-white text-gray-900 p-6 rounded-xl max-w-sm w-full mx-4 shadow-2xl border-4 border-[#1a472a]">
+    <div id="passwordModal" class="fixed inset-0 bg-black bg-opacity-80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white text-gray-900 p-6 rounded-xl max-w-sm w-full shadow-2xl border-4 border-[#1a472a]">
             <h3 class="text-xl font-bold mb-4 text-[#1a472a] text-center">請輸入後台密碼</h3>
-            <input type="password" id="adminPassword" class="w-full border-2 border-gray-300 p-2 rounded mb-4 text-center text-lg" placeholder="Password">
-            <div class="flex gap-2">
-                <button onclick="closePasswordModal()" class="flex-1 bg-gray-300 py-2 rounded font-bold hover:bg-gray-400">取消</button>
-                <button onclick="checkPassword()" class="flex-1 bg-[#c41e3a] text-white py-2 rounded font-bold hover:bg-[#a01830]">進入</button>
+            <input type="password" id="adminPassword" class="w-full border-2 border-gray-300 p-3 rounded-lg mb-6 text-center text-xl font-bold tracking-widest" placeholder="Password">
+            <div class="flex gap-4">
+                <button onclick="closePasswordModal()" class="flex-1 bg-gray-300 py-3 rounded-lg font-bold hover:bg-gray-400 transition-colors">取消</button>
+                <button onclick="checkPassword()" class="flex-1 bg-[#c41e3a] text-white py-3 rounded-lg font-bold hover:bg-[#a01830] transition-colors">進入</button>
             </div>
         </div>
     </div>
@@ -377,38 +411,45 @@
         import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, getDocs, doc, where, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Config & Init ---
-        // ⚠️ 部署到 GitHub Pages 前的必做設定 / REQUIRED SETUP FOR GITHUB PAGES
-        // ------------------------------------------------------------------
-        // 請到 Firebase Console (https://console.firebase.google.com/)
-        // 建立一個專案，並複製 "Web App" 的設定貼在下方：
-        
-        const manualConfig = {
-            // 請將下方的字串替換為您的 Firebase 實際設定
-            // Please replace the strings below with your actual Firebase config
-            apiKey: "AIzaSyB4mNbRMkVAY-R5JSrF2O7fPN4dDry8alI",
-            authDomain: "xmas-1654f.firebaseapp.com",
-            projectId: "xmas-1654f",
-            storageBucket: "xmas-1654f.firebasestorage.app",
-            messagingSenderId: "171667807726",
-            appId: "1:171667807726:web:485e64aa2ec736ef4f02ff",
-            measurementId: "G-ZBN2J3BKLD"
-        };
-
-        // 自動判斷環境：
         let finalConfig;
         let finalAppId;
 
+        // 1. 嘗試讀取 AI 環境變數
+        if (typeof __firebase_config !== 'undefined') {
+             finalConfig = JSON.parse(__firebase_config);
+             finalAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app';
+        } 
+        // 2. 嘗試讀取 window.myFirebaseConfig (來自 external js)
+        else if (typeof window.myFirebaseConfig !== 'undefined') {
+             finalConfig = window.myFirebaseConfig;
+             finalAppId = finalConfig.appId || 'christmas-raffle-v1';
+        }
+        // 3. Fallback (GitHub 安全性修正用，若 external js 不存在)
+        else {
+             finalConfig = {
+                apiKey: "AIzaSyB4mNbRMkVAY-R5JSrF2O7fPN4dDry8alI",
+                authDomain: "xmas-1654f.firebaseapp.com",
+                projectId: "xmas-1654f",
+                storageBucket: "xmas-1654f.firebasestorage.app",
+                messagingSenderId: "171667807726",
+                appId: "1:171667807726:web:485e64aa2ec736ef4f02ff",
+                measurementId: "G-ZBN2J3BKLD"
+             };
+             finalAppId = 'christmas-raffle-v1';
+        }
+
+        // --- App Init ---
+        let app, auth, db, appId;
+        
         try {
-            if (typeof __firebase_config !== 'undefined') {
-                finalConfig = JSON.parse(__firebase_config);
-                finalAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app';
-            } else {
-                finalConfig = manualConfig;
-                finalAppId = 'christmas-raffle-v1'; // 自訂 App ID
-            }
+            app = initializeApp(finalConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            appId = finalAppId;
         } catch (e) {
-            finalConfig = manualConfig;
-            finalAppId = 'christmas-raffle-v1';
+            console.error("Firebase Init Error:", e);
+            document.getElementById('errorDetails').classList.remove('hidden');
+            document.getElementById('errorDetailsText').innerText = "Firebase 初始化失敗，請檢查設定檔 (firebase-config.js)。\n" + e.message;
         }
 
         // --- DOM Elements ---
@@ -451,22 +492,6 @@
             statusEl.innerHTML = '<span class="text-red-400"><i class="fa-solid fa-circle-xmark"></i> 連線發生錯誤</span>';
             errorDetails.classList.remove('hidden');
             errorDetailsText.innerText = message + (technicalDetail ? "\n\n(技術代碼: " + technicalDetail + ")" : "");
-        }
-
-        // 檢查 Config 狀態
-        let app, auth, db, appId;
-        
-        if (typeof __firebase_config === 'undefined' && finalConfig.apiKey.includes("替換成您的")) {
-            showError("Firebase 設定未填寫！", "請用文字編輯器開啟檔案，修改 'manualConfig' 區塊。");
-        } else {
-            try {
-                app = initializeApp(finalConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-                appId = finalAppId;
-            } catch (e) {
-                showError("Firebase 初始化失敗，請檢查 Config 格式。", e.message);
-            }
         }
 
         // --- State ---
@@ -619,9 +644,11 @@
 
                     const row = document.createElement('tr');
                     row.className = 'bg-yellow-900 bg-opacity-20 hover:bg-opacity-40 transition-colors border-b border-yellow-800';
-                    const rankHtml = rank <= 3 
-                        ? `<span class="inline-block w-8 h-8 rounded-full bg-yellow-500 text-black font-bold flex items-center justify-center">${rank}</span>` 
-                        : `<span class="text-gray-300 pl-2">#${rank}</span>`;
+                    
+                    // Unified Circle Style: All ranks use the gold style
+                    const badgeClass = "bg-yellow-500 text-black";
+                        
+                    const rankHtml = `<span class="inline-block w-8 h-8 rounded-full ${badgeClass} font-bold flex items-center justify-center shadow-md">${rank}</span>`;
                     
                     const claimBtnClass = isClaimed 
                         ? "bg-gray-600 hover:bg-gray-500 text-gray-300" 
@@ -631,13 +658,13 @@
 
                     row.innerHTML = `
                         <td class="p-3">${rankHtml}</td>
-                        <td class="p-3 font-bold text-lg ${adminNameClass}">
+                        <td class="p-3 font-bold text-base md:text-lg ${adminNameClass}">
                             ${escapeHtml(data.name)}
                         </td>
-                        <td class="p-3 font-mono">${escapeHtml(phoneDisplay)}</td>
-                        <td class="p-3 text-xs text-yellow-500 opacity-70">${time}</td>
+                        <td class="p-3 font-mono hidden md:table-cell">${escapeHtml(phoneDisplay)}</td>
+                        <td class="p-3 text-xs text-yellow-500 opacity-70 hidden md:table-cell">${time}</td>
                         <td class="p-3">
-                            <button onclick="toggleClaimStatus('${data.id}', ${isClaimed})" class="text-xs px-2 py-1 rounded ${claimBtnClass} font-bold border border-gray-500">
+                            <button onclick="toggleClaimStatus('${data.id}', ${isClaimed})" class="text-xs px-2 py-1 rounded ${claimBtnClass} font-bold border border-gray-500 whitespace-nowrap">
                                 ${claimBtnText}
                             </button>
                         </td>
@@ -669,9 +696,11 @@
 
                     const row = document.createElement('tr');
                     row.className = 'border-b border-yellow-800 hover:bg-yellow-800 hover:bg-opacity-30';
-                    const rankHtml = rank <= 3 
-                        ? `<span class="inline-block w-8 h-8 rounded-full bg-yellow-500 text-black font-bold flex items-center justify-center">${rank}</span>` 
-                        : `<span class="text-gray-300 pl-2">#${rank}</span>`;
+                    
+                    // Unified Circle Style: All ranks use the gold style
+                    const badgeClass = "bg-yellow-500 text-black";
+                        
+                    const rankHtml = `<span class="inline-block w-8 h-8 rounded-full ${badgeClass} font-bold flex items-center justify-center shadow-md">${rank}</span>`;
 
                     row.innerHTML = `
                         <td class="p-2">${rankHtml}</td>
@@ -705,7 +734,7 @@
                 row.innerHTML = `
                     <td class="p-3 font-bold text-white">${escapeHtml(data.name)}</td>
                     <td class="p-3 text-gray-300">${escapeHtml(phoneDisplay)}</td>
-                    <td class="p-3 text-gray-400 text-sm">${time}</td>
+                    <td class="p-3 text-gray-400 text-sm hidden md:table-cell">${time}</td>
                 `;
                 tableBody.appendChild(row);
             });
