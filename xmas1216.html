@@ -638,18 +638,17 @@
                 
                 filteredWinners.forEach(data => {
                     const rank = data.winnerRank || '?';
-                    // Show last 3 digits on desktop, hidden on mobile unless searched? No, show all.
-                    // RWD: Hide phone on super small screens in table if needed, but phone last 3 is critical.
-                    // Let's keep it simple.
                     const phoneDisplay = data.phone.length > 3 ? '***' + data.phone.slice(-3) : data.phone;
                     const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
                     const isClaimed = data.claimed || false;
 
                     const row = document.createElement('tr');
                     row.className = 'bg-yellow-900 bg-opacity-20 hover:bg-opacity-40 transition-colors border-b border-yellow-800';
-                    const rankHtml = rank <= 3 
-                        ? `<span class="inline-block w-8 h-8 rounded-full bg-yellow-500 text-black font-bold flex items-center justify-center">${rank}</span>` 
-                        : `<span class="text-gray-300 pl-2">#${rank}</span>`;
+                    
+                    // Unified Circle Style: All ranks use the gold style
+                    const badgeClass = "bg-yellow-500 text-black";
+                        
+                    const rankHtml = `<span class="inline-block w-8 h-8 rounded-full ${badgeClass} font-bold flex items-center justify-center shadow-md">${rank}</span>`;
                     
                     const claimBtnClass = isClaimed 
                         ? "bg-gray-600 hover:bg-gray-500 text-gray-300" 
@@ -670,8 +669,6 @@
                             </button>
                         </td>
                     `;
-                    // Mobile-friendly inner content for small cells if needed
-                    // For now, hidden phone on mobile admin table is handled by CSS classes in THEAD
                     winnersTableBody.appendChild(row);
                 });
             }
@@ -699,9 +696,11 @@
 
                     const row = document.createElement('tr');
                     row.className = 'border-b border-yellow-800 hover:bg-yellow-800 hover:bg-opacity-30';
-                    const rankHtml = rank <= 3 
-                        ? `<span class="inline-block w-8 h-8 rounded-full bg-yellow-500 text-black font-bold flex items-center justify-center">${rank}</span>` 
-                        : `<span class="text-gray-300 pl-2">#${rank}</span>`;
+                    
+                    // Unified Circle Style: All ranks use the gold style
+                    const badgeClass = "bg-yellow-500 text-black";
+                        
+                    const rankHtml = `<span class="inline-block w-8 h-8 rounded-full ${badgeClass} font-bold flex items-center justify-center shadow-md">${rank}</span>`;
 
                     row.innerHTML = `
                         <td class="p-2">${rankHtml}</td>
